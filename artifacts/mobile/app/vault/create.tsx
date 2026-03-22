@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
-import { useVaults } from "@/context/VaultContext";
+import { useVaults, type Vault } from "@/context/VaultContext";
 
 const ICONS = [
   "🏠","🏗️","💒","🚗","🎓","🏥","✈️","🛒","💰","🏦","📦","🎯",
@@ -31,23 +31,38 @@ const COLORS = [
 export default function CreateVaultScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { createVault, mainVault } = useVaults();
+  const { createVault, mainVault, mainVaults } = useVaults();
   const params = useLocalSearchParams<{ isMain?: string; parentId?: string }>();
 
   const isMain = params.isMain === "true";
-  const parentId = params.parentId;
+  const paramParentId = params.parentId;
+
+  // Resolve which main vault this sub-vault belongs to
+  const resolvedParent = paramParentId
+    ? mainVaults.find((v) => v.id === paramParentId) ?? mainVault
+    : mainVault;
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [initialBalance, setInitialBalance] = useState("");
   const [selectedIcon, setSelectedIcon] = useState(isMain ? "🏠" : "📦");
   const [selectedColor, setSelectedColor] = useState(Colors.accent);
+  const [selectedParentId, setSelectedParentId] = useState<string | undefined>(
+    resolvedParent?.id
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const selectedParentVault = mainVaults.find((v) => v.id === selectedParentId);
+  const needsParentPicker = !isMain && mainVaults.length > 1 && !paramParentId;
 
   const handleCreate = async () => {
     if (!name.trim()) {
       setError("Vault name is required");
+      return;
+    }
+    if (!isMain && !selectedParentId && mainVaults.length > 0) {
+      setError("Please select a main vault to add this sub-vault under");
       return;
     }
     if (!user) return;
@@ -64,7 +79,7 @@ export default function CreateVaultScreen() {
         color: selectedColor,
         initialBalance: balance,
         isMain,
-        parentId: isMain ? undefined : (parentId || mainVault?.id),
+        parentId: isMain ? undefined : selectedParentId,
         ownerId: user.id,
         ownerName: user.name,
       });
@@ -141,10 +156,10 @@ export default function CreateVaultScreen() {
               {isMain ? "MAIN VAULT" : "SUB-VAULT"}
             </Text>
           </View>
-          {!isMain && mainVault && (
+          {!isMain && selectedParentVault && (
             <View style={styles.parentChip}>
-              <Text style={styles.parentChipIcon}>{mainVault.icon}</Text>
-              <Text style={styles.parentChipText}>Under {mainVault.name}</Text>
+              <Text style={styles.parentChipIcon}>{selectedParentVault.icon}</Text>
+              <Text style={styles.parentChipText}>Under {selectedParentVault.name}</Text>
             </View>
           )}
         </View>
@@ -155,6 +170,44 @@ export default function CreateVaultScreen() {
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
+
+        {/* Parent vault picker — only shown when there are multiple main vaults */}
+        {needsParentPicker && (
+          <View style={styles.formSection}>
+            <Text style={styles.fieldLabel}>Add under which Main Vault?</Text>
+            <View style={styles.parentPickerList}>
+              {mainVaults.map((mv) => (
+                <Pressable
+                  key={mv.id}
+                  style={[
+                    styles.parentPickerOption,
+                    selectedParentId === mv.id && [
+                      styles.parentPickerSelected,
+                      { borderColor: mv.color || Colors.accent },
+                    ],
+                  ]}
+                  onPress={() => {
+                    setSelectedParentId(mv.id);
+                    Haptics.selectionAsync();
+                  }}
+                >
+                  <View style={[styles.parentPickerIcon, { backgroundColor: `${mv.color}22` }]}>
+                    <Text style={styles.parentPickerIconText}>{mv.icon}</Text>
+                  </View>
+                  <Text style={[
+                    styles.parentPickerName,
+                    selectedParentId === mv.id && { color: mv.color || Colors.accent },
+                  ]}>
+                    {mv.name}
+                  </Text>
+                  {selectedParentId === mv.id && (
+                    <Feather name="check-circle" size={18} color={mv.color || Colors.accent} />
+                  )}
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
 
         <View style={styles.formSection}>
           <Text style={styles.fieldLabel}>Vault Name *</Text>
@@ -437,5 +490,33 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     fontSize: 16,
     color: Colors.primary,
+  },
+  parentPickerList: { gap: 8 },
+  parentPickerOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    padding: 14,
+  },
+  parentPickerSelected: {
+    backgroundColor: Colors.surfaceLight,
+  },
+  parentPickerIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  parentPickerIconText: { fontSize: 20 },
+  parentPickerName: {
+    flex: 1,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    color: Colors.textPrimary,
   },
 });

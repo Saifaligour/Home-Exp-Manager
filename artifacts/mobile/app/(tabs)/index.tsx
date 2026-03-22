@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
-import { useVaults } from "@/context/VaultContext";
+import { useVaults, type Vault } from "@/context/VaultContext";
 import { TransactionItem } from "@/components/TransactionItem";
 
 function formatCurrency(amount: number): string {
@@ -34,10 +34,169 @@ function formatCurrency(amount: number): string {
   return `₹${amount.toLocaleString("en-IN")}`;
 }
 
+function MainVaultBlock({
+  mainVault,
+  childVaults,
+  index,
+}: {
+  mainVault: Vault;
+  childVaults: Vault[];
+  index: number;
+}) {
+  const totalChildBalance = childVaults.reduce((s, v) => s + v.balance, 0);
+  const combinedBalance = mainVault.balance + totalChildBalance;
+
+  return (
+    <Animated.View
+      entering={FadeInDown.duration(400).delay(index * 80)}
+      style={styles.mainBlock}
+    >
+      {/* Main Vault Card */}
+      <Pressable
+        style={({ pressed }) => [
+          styles.mainVaultCard,
+          { opacity: pressed ? 0.93 : 1 },
+        ]}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push({ pathname: "/vault/[id]", params: { id: mainVault.id } });
+        }}
+      >
+        <LinearGradient colors={["#2A2050", "#1A1F3A"]} style={styles.mainVaultGradient}>
+          <View style={styles.mainVaultTop}>
+            <View style={[styles.mainVaultIcon, { backgroundColor: `${mainVault.color}25` }]}>
+              <Text style={styles.mainVaultIconText}>{mainVault.icon}</Text>
+            </View>
+            <View style={styles.mainVaultMeta}>
+              <Text style={styles.mainVaultName}>{mainVault.name}</Text>
+              <View style={styles.mainBadge}>
+                <Feather name="shield" size={9} color={Colors.accent} />
+                <Text style={styles.mainBadgeText}>MAIN VAULT</Text>
+              </View>
+            </View>
+            <Feather name="chevron-right" size={18} color={Colors.textSecondary} />
+          </View>
+
+          <View style={styles.mainVaultBalanceRow}>
+            <View>
+              <Text style={styles.balanceLabel}>
+                {childVaults.length > 0 ? "Combined Balance" : "Balance"}
+              </Text>
+              <Text style={[styles.mainVaultBalance, { color: mainVault.color || Colors.accent }]}>
+                {formatCurrency(combinedBalance)}
+              </Text>
+            </View>
+            <View style={styles.subBalanceBox}>
+              <Text style={styles.subBalanceLabel}>
+                {childVaults.length} sub-vault{childVaults.length !== 1 ? "s" : ""}
+              </Text>
+              {childVaults.length > 0 && (
+                <Text style={styles.subBalanceValue}>{formatCurrency(totalChildBalance)}</Text>
+              )}
+            </View>
+          </View>
+        </LinearGradient>
+      </Pressable>
+
+      {/* Sub-Vaults */}
+      <View style={styles.childSection}>
+        <View style={styles.connectorLine} />
+
+        <View style={styles.childHeader}>
+          <View style={styles.childHeaderLeft}>
+            <View style={styles.childDot} />
+            <Text style={styles.childTitle}>Sub-Vaults</Text>
+            {childVaults.length > 0 && (
+              <View style={styles.childCount}>
+                <Text style={styles.childCountText}>{childVaults.length}</Text>
+              </View>
+            )}
+          </View>
+          <Pressable
+            style={styles.addChildBtn}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push({ pathname: "/vault/create", params: { parentId: mainVault.id } });
+            }}
+          >
+            <Feather name="plus" size={14} color={Colors.accent} />
+            <Text style={styles.addChildText}>Add</Text>
+          </Pressable>
+        </View>
+
+        {childVaults.length === 0 ? (
+          <Pressable
+            style={styles.emptyChildCard}
+            onPress={() =>
+              router.push({ pathname: "/vault/create", params: { parentId: mainVault.id } })
+            }
+          >
+            <Feather name="plus-circle" size={20} color={Colors.muted} />
+            <Text style={styles.emptyChildText}>Add sub-vaults to organise expenses</Text>
+            <Text style={styles.emptyChildHint}>e.g. Home, Construction, Marriage</Text>
+          </Pressable>
+        ) : (
+          <View style={styles.childList}>
+            {childVaults.map((vault, i) => {
+              const isLast = i === childVaults.length - 1;
+              const credit = vault.transactions
+                .filter((t) => t.type === "credit")
+                .reduce((s, t) => s + t.amount, 0);
+              const debit = vault.transactions
+                .filter((t) => t.type === "debit")
+                .reduce((s, t) => s + t.amount, 0);
+
+              return (
+                <Animated.View
+                  key={vault.id}
+                  entering={FadeInDown.duration(280).delay(i * 50)}
+                  style={styles.childRowWrap}
+                >
+                  <View style={styles.branchWrap}>
+                    <View style={[styles.branchVert, isLast && { height: 28 }]} />
+                    <View style={styles.branchHoriz} />
+                  </View>
+                  <Pressable
+                    style={({ pressed }) => [styles.childCard, { opacity: pressed ? 0.88 : 1 }]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push({ pathname: "/vault/[id]", params: { id: vault.id } });
+                    }}
+                  >
+                    <View style={[styles.childVaultIcon, { backgroundColor: `${vault.color}22` }]}>
+                      <Text style={styles.childVaultIconText}>{vault.icon}</Text>
+                    </View>
+                    <View style={styles.childCardInfo}>
+                      <Text style={styles.childCardName}>{vault.name}</Text>
+                      <View style={styles.childCardStats}>
+                        <Feather name="arrow-down-left" size={10} color={Colors.success} />
+                        <Text style={styles.childStatText}>{formatCurrency(credit)}</Text>
+                        <Text style={styles.childStatDot}>·</Text>
+                        <Feather name="arrow-up-right" size={10} color={Colors.danger} />
+                        <Text style={styles.childStatText}>{formatCurrency(debit)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.childCardRight}>
+                      <Text style={[styles.childBalance, { color: vault.color || Colors.accent }]}>
+                        {formatCurrency(vault.balance)}
+                      </Text>
+                      <Feather name="chevron-right" size={14} color={Colors.muted} />
+                    </View>
+                  </Pressable>
+                </Animated.View>
+              );
+            })}
+          </View>
+        )}
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { vaults, mainVault, isLoading, refreshVaults } = useVaults();
+  const { vaults, mainVaults, isLoading, refreshVaults } = useVaults();
 
   const pulseOpacity = useSharedValue(1);
 
@@ -52,29 +211,17 @@ export default function HomeScreen() {
     );
   }, []);
 
-  const pulseStyle = useAnimatedStyle(() => ({
-    opacity: pulseOpacity.value,
-  }));
+  const pulseStyle = useAnimatedStyle(() => ({ opacity: pulseOpacity.value }));
 
   if (!user) {
     router.replace("/(auth)");
     return null;
   }
 
-  const childVaults = mainVault
-    ? vaults.filter((v) => !v.isMain && v.parentId === mainVault.id)
-    : [];
-
   const recentTransactions = vaults
     .flatMap((v) => v.transactions.map((t) => ({ ...t, vaultName: v.name })))
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 8);
-
-  const totalChildBalance = childVaults.reduce((s, v) => s + v.balance, 0);
-  const totalBalance = (mainVault?.balance ?? 0) + totalChildBalance;
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -83,13 +230,10 @@ export default function HomeScreen() {
     return "Good evening";
   })();
 
+  const grandTotal = vaults.reduce((s, v) => s + v.balance, 0);
+
   return (
-    <View
-      style={[
-        styles.container,
-        { paddingTop: Platform.OS === "web" ? 67 : insets.top },
-      ]}
-    >
+    <View style={[styles.container, { paddingTop: Platform.OS === "web" ? 67 : insets.top }]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
@@ -98,11 +242,7 @@ export default function HomeScreen() {
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={isLoading}
-            onRefresh={refreshVaults}
-            tintColor={Colors.accent}
-          />
+          <RefreshControl refreshing={isLoading} onRefresh={refreshVaults} tintColor={Colors.accent} />
         }
       >
         {/* Header */}
@@ -111,297 +251,98 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>{greeting},</Text>
             <Text style={styles.userName}>{user.name}</Text>
           </View>
+          <View style={styles.headerRight}>
+            {vaults.length > 0 && (
+              <View style={styles.totalPill}>
+                <Text style={styles.totalPillLabel}>Total</Text>
+                <Text style={styles.totalPillValue}>{formatCurrency(grandTotal)}</Text>
+              </View>
+            )}
+            <Pressable style={styles.notifButton} onPress={() => Haptics.selectionAsync()}>
+              <Feather name="bell" size={20} color={Colors.textSecondary} />
+            </Pressable>
+          </View>
+        </Animated.View>
+
+        {/* "New Main Vault" button — always visible */}
+        <Animated.View entering={FadeIn.duration(400).delay(60)} style={styles.newMainRow}>
+          <Text style={styles.vaultsHeading}>
+            {mainVaults.length === 0
+              ? "Get Started"
+              : `Main Vaults (${mainVaults.length})`}
+          </Text>
           <Pressable
-            style={styles.notifButton}
-            onPress={() => Haptics.selectionAsync()}
+            style={styles.newMainBtn}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push({ pathname: "/vault/create", params: { isMain: "true" } });
+            }}
           >
-            <Feather name="bell" size={20} color={Colors.textSecondary} />
+            <Feather name="plus" size={14} color={Colors.accent} />
+            <Text style={styles.newMainText}>New Main Vault</Text>
           </Pressable>
         </Animated.View>
 
         {/* Loading skeleton */}
         {isLoading ? (
           <Animated.View style={[styles.skeleton, pulseStyle]} />
-        ) : !mainVault ? (
-          /* No main vault — prompt to create one */
+        ) : mainVaults.length === 0 ? (
+          /* Empty state */
           <Animated.View entering={FadeInDown.duration(400).delay(100)}>
-            <View style={styles.emptyMainCard}>
-              <LinearGradient
-                colors={["#2A2050", "#1A1F3A"]}
-                style={styles.emptyMainGradient}
-              >
+            <Pressable
+              style={styles.emptyMainCard}
+              onPress={() =>
+                router.push({ pathname: "/vault/create", params: { isMain: "true" } })
+              }
+            >
+              <LinearGradient colors={["#2A2050", "#1A1F3A"]} style={styles.emptyMainGradient}>
                 <View style={styles.emptyMainIcon}>
                   <Feather name="shield" size={28} color={Colors.muted} />
                 </View>
-                <Text style={styles.emptyMainTitle}>No Main Vault</Text>
+                <Text style={styles.emptyMainTitle}>No Vaults Yet</Text>
                 <Text style={styles.emptyMainSub}>
-                  Create your main vault first. All sub-vaults will be organized under it.
+                  Create your first main vault. Each main vault can hold multiple sub-vaults to organise your expenses.
                 </Text>
-                <Pressable
-                  onPress={() =>
-                    router.push({
-                      pathname: "/vault/create",
-                      params: { isMain: "true" },
-                    })
-                  }
+                <LinearGradient
+                  colors={[Colors.accent, Colors.accentLight]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.emptyMainBtn}
                 >
-                  <LinearGradient
-                    colors={[Colors.accent, Colors.accentLight]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.createMainBtn}
-                  >
-                    <Feather name="plus" size={16} color={Colors.primary} />
-                    <Text style={styles.createMainText}>Create Main Vault</Text>
-                  </LinearGradient>
-                </Pressable>
-              </LinearGradient>
-            </View>
-          </Animated.View>
-        ) : (
-          /* Main Vault + Children hierarchy */
-          <Animated.View entering={FadeInDown.duration(400).delay(100)}>
-            {/* Main Vault Card */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.mainVaultCard,
-                { opacity: pressed ? 0.93 : 1 },
-              ]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push({
-                  pathname: "/vault/[id]",
-                  params: { id: mainVault.id },
-                });
-              }}
-            >
-              <LinearGradient
-                colors={["#2A2050", "#1A1F3A"]}
-                style={styles.mainVaultGradient}
-              >
-                <View style={styles.mainVaultTop}>
-                  <View
-                    style={[
-                      styles.mainVaultIcon,
-                      { backgroundColor: `${mainVault.color}25` },
-                    ]}
-                  >
-                    <Text style={styles.mainVaultIconText}>
-                      {mainVault.icon}
-                    </Text>
-                  </View>
-                  <View style={styles.mainVaultMeta}>
-                    <Text style={styles.mainVaultName}>{mainVault.name}</Text>
-                    <View style={styles.mainBadge}>
-                      <Feather name="shield" size={9} color={Colors.accent} />
-                      <Text style={styles.mainBadgeText}>MAIN VAULT</Text>
-                    </View>
-                  </View>
-                  <Feather
-                    name="chevron-right"
-                    size={20}
-                    color={Colors.textSecondary}
-                  />
-                </View>
-
-                <View style={styles.mainVaultBalanceRow}>
-                  <View>
-                    <Text style={styles.balanceLabel}>Total Balance</Text>
-                    <Text
-                      style={[
-                        styles.mainVaultBalance,
-                        { color: mainVault.color || Colors.accent },
-                      ]}
-                    >
-                      {formatCurrency(totalBalance)}
-                    </Text>
-                  </View>
-                  <View style={styles.subBalanceBox}>
-                    <Text style={styles.subBalanceLabel}>
-                      {childVaults.length} Sub-vault
-                      {childVaults.length !== 1 ? "s" : ""}
-                    </Text>
-                    <Text style={styles.subBalanceValue}>
-                      {formatCurrency(totalChildBalance)}
-                    </Text>
-                  </View>
-                </View>
+                  <Feather name="plus" size={16} color={Colors.primary} />
+                  <Text style={styles.emptyMainBtnText}>Create Main Vault</Text>
+                </LinearGradient>
               </LinearGradient>
             </Pressable>
-
-            {/* Sub-Vaults Section */}
-            <View style={styles.childSection}>
-              {/* Connector line from main vault */}
-              <View style={styles.connectorWrap}>
-                <View style={styles.connectorLine} />
-              </View>
-
-              <View style={styles.childHeader}>
-                <View style={styles.childHeaderLeft}>
-                  <View style={styles.childDot} />
-                  <Text style={styles.childTitle}>Sub-Vaults</Text>
-                  {childVaults.length > 0 && (
-                    <View style={styles.childCount}>
-                      <Text style={styles.childCountText}>
-                        {childVaults.length}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                <Pressable
-                  style={styles.addChildBtn}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    router.push({
-                      pathname: "/vault/create",
-                      params: { parentId: mainVault.id },
-                    });
-                  }}
-                >
-                  <Feather name="plus" size={14} color={Colors.accent} />
-                  <Text style={styles.addChildText}>Add</Text>
-                </Pressable>
-              </View>
-
-              {childVaults.length === 0 ? (
-                <Pressable
-                  style={styles.emptyChildCard}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/vault/create",
-                      params: { parentId: mainVault.id },
-                    })
-                  }
-                >
-                  <Feather name="plus-circle" size={22} color={Colors.muted} />
-                  <Text style={styles.emptyChildText}>
-                    Add a sub-vault to track specific expenses
-                  </Text>
-                  <Text style={styles.emptyChildHint}>
-                    e.g. Home Expenses, Construction, Marriage
-                  </Text>
-                </Pressable>
-              ) : (
-                <View style={styles.childList}>
-                  {childVaults.map((vault, i) => {
-                    const isLast = i === childVaults.length - 1;
-                    const credit = vault.transactions
-                      .filter((t) => t.type === "credit")
-                      .reduce((s, t) => s + t.amount, 0);
-                    const debit = vault.transactions
-                      .filter((t) => t.type === "debit")
-                      .reduce((s, t) => s + t.amount, 0);
-
-                    return (
-                      <Animated.View
-                        key={vault.id}
-                        entering={FadeInDown.duration(300).delay(i * 60)}
-                        style={styles.childRowWrap}
-                      >
-                        {/* Tree branch lines */}
-                        <View style={styles.branchWrap}>
-                          <View
-                            style={[
-                              styles.branchVert,
-                              isLast && { height: 28 },
-                            ]}
-                          />
-                          <View style={styles.branchHoriz} />
-                        </View>
-
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.childCard,
-                            { opacity: pressed ? 0.88 : 1 },
-                          ]}
-                          onPress={() => {
-                            Haptics.impactAsync(
-                              Haptics.ImpactFeedbackStyle.Light
-                            );
-                            router.push({
-                              pathname: "/vault/[id]",
-                              params: { id: vault.id },
-                            });
-                          }}
-                        >
-                          <View
-                            style={[
-                              styles.childVaultIcon,
-                              { backgroundColor: `${vault.color}22` },
-                            ]}
-                          >
-                            <Text style={styles.childVaultIconText}>
-                              {vault.icon}
-                            </Text>
-                          </View>
-                          <View style={styles.childCardInfo}>
-                            <Text style={styles.childCardName}>
-                              {vault.name}
-                            </Text>
-                            <View style={styles.childCardStats}>
-                              <Feather
-                                name="arrow-down-left"
-                                size={10}
-                                color={Colors.success}
-                              />
-                              <Text style={styles.childStatText}>
-                                {formatCurrency(credit)}
-                              </Text>
-                              <Text style={styles.childStatDivider}>·</Text>
-                              <Feather
-                                name="arrow-up-right"
-                                size={10}
-                                color={Colors.danger}
-                              />
-                              <Text style={styles.childStatText}>
-                                {formatCurrency(debit)}
-                              </Text>
-                            </View>
-                          </View>
-                          <View style={styles.childCardRight}>
-                            <Text
-                              style={[
-                                styles.childBalance,
-                                { color: vault.color || Colors.accent },
-                              ]}
-                            >
-                              {formatCurrency(vault.balance)}
-                            </Text>
-                            <Feather
-                              name="chevron-right"
-                              size={14}
-                              color={Colors.muted}
-                            />
-                          </View>
-                        </Pressable>
-                      </Animated.View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
           </Animated.View>
+        ) : (
+          /* All main vaults with their children */
+          <View>
+            {mainVaults.map((mv, i) => {
+              const children = vaults.filter((v) => !v.isMain && v.parentId === mv.id);
+              return (
+                <MainVaultBlock
+                  key={mv.id}
+                  mainVault={mv}
+                  childVaults={children}
+                  index={i}
+                />
+              );
+            })}
+          </View>
         )}
 
         {/* Recent Activity */}
         {recentTransactions.length > 0 && (
-          <Animated.View
-            entering={FadeInDown.duration(400).delay(300)}
-            style={styles.section}
-          >
+          <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recent Activity</Text>
             </View>
             <View style={styles.txCard}>
               {recentTransactions.map((tx, i) => (
                 <React.Fragment key={tx.id}>
-                  <TransactionItem
-                    transaction={tx}
-                    showVaultName={(tx as any).vaultName}
-                  />
-                  {i < recentTransactions.length - 1 && (
-                    <View style={styles.separator} />
-                  )}
+                  <TransactionItem transaction={tx} showVaultName={(tx as any).vaultName} />
+                  {i < recentTransactions.length - 1 && <View style={styles.separator} />}
                 </React.Fragment>
               ))}
             </View>
@@ -422,7 +363,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   greeting: {
     fontFamily: "Inter_400Regular",
@@ -435,6 +376,31 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     letterSpacing: -0.3,
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  totalPill: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: "center",
+  },
+  totalPillLabel: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 10,
+    color: Colors.textSecondary,
+    lineHeight: 12,
+  },
+  totalPillValue: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 13,
+    color: Colors.accent,
+  },
   notifButton: {
     width: 42,
     height: 42,
@@ -446,15 +412,45 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  newMainRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    marginBottom: 14,
+  },
+  vaultsHeading: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 16,
+    color: Colors.textPrimary,
+    letterSpacing: -0.2,
+  },
+  newMainBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: `${Colors.accent}18`,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  newMainText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    color: Colors.accent,
+  },
+
   skeleton: {
-    height: 190,
+    height: 180,
     backgroundColor: Colors.surface,
     borderRadius: 22,
     marginHorizontal: 20,
     marginBottom: 8,
   },
 
-  /* Empty main vault */
+  /* Empty state */
   emptyMainCard: {
     marginHorizontal: 20,
     borderRadius: 22,
@@ -469,8 +465,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyMainIcon: {
-    width: 56,
-    height: 56,
+    width: 60,
+    height: 60,
     borderRadius: 18,
     backgroundColor: Colors.surface,
     alignItems: "center",
@@ -488,9 +484,9 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: "center",
     lineHeight: 20,
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  createMainBtn: {
+  emptyMainBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -498,13 +494,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
   },
-  createMainText: {
+  emptyMainBtnText: {
     fontFamily: "Inter_700Bold",
     fontSize: 14,
     color: Colors.primary,
   },
 
-  /* Main vault card */
+  /* Per-main-vault block */
+  mainBlock: {
+    marginBottom: 20,
+  },
   mainVaultCard: {
     marginHorizontal: 20,
     borderRadius: 22,
@@ -517,20 +516,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 18,
   },
   mainVaultIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
-  mainVaultIconText: { fontSize: 24 },
+  mainVaultIconText: { fontSize: 22 },
   mainVaultMeta: { flex: 1 },
   mainVaultName: {
     fontFamily: "Inter_700Bold",
-    fontSize: 17,
+    fontSize: 16,
     color: Colors.textPrimary,
     letterSpacing: -0.2,
   },
@@ -538,7 +537,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginTop: 3,
+    marginTop: 2,
   },
   mainBadgeText: {
     fontFamily: "Inter_600SemiBold",
@@ -555,12 +554,12 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 4,
+    marginBottom: 3,
   },
   mainVaultBalance: {
     fontFamily: "Inter_700Bold",
-    fontSize: 32,
-    letterSpacing: -1,
+    fontSize: 30,
+    letterSpacing: -0.8,
   },
   subBalanceBox: {
     alignItems: "flex-end",
@@ -577,32 +576,27 @@ const styles = StyleSheet.create({
   },
   subBalanceValue: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.textPrimary,
   },
 
-  /* Child vaults section */
+  /* Sub-vaults tree */
   childSection: {
-    marginHorizontal: 20,
+    marginLeft: 36,
+    marginRight: 20,
     marginTop: 0,
-  },
-  connectorWrap: {
-    alignItems: "center",
-    paddingLeft: 24,
-    height: 18,
   },
   connectorLine: {
     width: 2,
-    flex: 1,
+    height: 16,
     backgroundColor: Colors.border,
-    marginLeft: 0,
+    marginLeft: 12,
   },
   childHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 10,
-    paddingLeft: 4,
   },
   childHeaderLeft: {
     flexDirection: "row",
@@ -614,16 +608,17 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: Colors.accent,
-    marginLeft: 20,
+    marginLeft: 8,
   },
   childTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 16,
-    color: Colors.textPrimary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    color: Colors.textSecondary,
+    letterSpacing: 0.2,
   },
   childCount: {
     backgroundColor: `${Colors.accent}22`,
-    borderRadius: 8,
+    borderRadius: 7,
     paddingHorizontal: 7,
     paddingVertical: 2,
   },
@@ -636,30 +631,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: `${Colors.accent}18`,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 9,
+    backgroundColor: `${Colors.accent}14`,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   addChildText: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.accent,
   },
 
   emptyChildCard: {
-    marginLeft: 32,
     backgroundColor: Colors.surface,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: Colors.border,
     borderStyle: "dashed",
-    padding: 20,
+    padding: 18,
     alignItems: "center",
-    gap: 6,
-    marginBottom: 16,
+    gap: 5,
+    marginBottom: 4,
   },
   emptyChildText: {
     fontFamily: "Inter_500Medium",
@@ -674,60 +668,49 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  childList: {
-    marginLeft: 24,
-    marginBottom: 4,
-  },
-  childRowWrap: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 10,
-  },
-  branchWrap: {
-    width: 20,
-    alignItems: "flex-start",
-    marginTop: 0,
-  },
+  childList: { gap: 8 },
+  childRowWrap: { flexDirection: "row", alignItems: "flex-start" },
+  branchWrap: { width: 22, alignItems: "flex-start" },
   branchVert: {
     width: 2,
     height: "100%",
     backgroundColor: Colors.border,
     position: "absolute",
-    left: 0,
+    left: 10,
     top: 0,
   },
   branchHoriz: {
-    width: 18,
+    width: 12,
     height: 2,
     backgroundColor: Colors.border,
     marginTop: 26,
-    marginLeft: 0,
+    marginLeft: 10,
   },
   childCard: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.surface,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 14,
-    gap: 12,
+    padding: 12,
+    gap: 10,
   },
   childVaultIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
   },
-  childVaultIconText: { fontSize: 20 },
+  childVaultIconText: { fontSize: 18 },
   childCardInfo: { flex: 1 },
   childCardName: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.textPrimary,
-    marginBottom: 4,
+    marginBottom: 3,
   },
   childCardStats: {
     flexDirection: "row",
@@ -739,25 +722,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.textSecondary,
   },
-  childStatDivider: {
-    color: Colors.muted,
-    fontSize: 11,
-  },
-  childCardRight: {
-    alignItems: "flex-end",
-    gap: 4,
-  },
-  childBalance: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 15,
-  },
+  childStatDot: { color: Colors.muted, fontSize: 11 },
+  childCardRight: { alignItems: "flex-end", gap: 4 },
+  childBalance: { fontFamily: "Inter_700Bold", fontSize: 14 },
 
   /* Recent activity */
-  section: { marginTop: 20 },
+  section: { marginTop: 8, marginBottom: 8 },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 20,
     marginBottom: 12,
   },

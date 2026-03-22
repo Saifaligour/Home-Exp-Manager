@@ -51,6 +51,7 @@ export interface Vault {
 interface VaultContextValue {
   vaults: Vault[];
   mainVault: Vault | undefined;
+  mainVaults: Vault[];
   isLoading: boolean;
   createVault: (data: CreateVaultData) => Promise<Vault>;
   updateVault: (id: string, data: Partial<Vault>) => Promise<void>;
@@ -329,12 +330,14 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [vaults]
   );
 
-  const mainVault = useMemo(() => vaults.find((v) => v.isMain), [vaults]);
+  const mainVaults = useMemo(() => vaults.filter((v) => v.isMain), [vaults]);
+  const mainVault = useMemo(() => mainVaults[0], [mainVaults]);
 
   const value = useMemo(
     () => ({
       vaults,
       mainVault,
+      mainVaults,
       isLoading,
       createVault,
       updateVault,
@@ -349,6 +352,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [
       vaults,
       mainVault,
+      mainVaults,
       isLoading,
       createVault,
       updateVault,
