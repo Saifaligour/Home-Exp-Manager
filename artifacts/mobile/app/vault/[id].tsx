@@ -26,16 +26,19 @@ function formatCurrency(amount: number): string {
   return `₹${amount.toLocaleString("en-IN")}`;
 }
 
+type Tab = "transactions" | "sub-vaults" | "members";
+
 export default function VaultDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { vaults, deleteTransaction } = useVaults();
-  const [activeTab, setActiveTab] = useState<"transactions" | "members">(
-    "transactions"
-  );
+  const [activeTab, setActiveTab] = useState<Tab>("transactions");
 
   const vault = vaults.find((v) => v.id === id);
+  const childVaults = vault?.isMain
+    ? vaults.filter((v) => !v.isMain && v.parentId === vault.id)
+    : [];
 
   if (!vault) {
     return (
@@ -58,6 +61,9 @@ export default function VaultDetailScreen() {
     .filter((t) => t.type === "debit")
     .reduce((s, t) => s + t.amount, 0);
 
+  const totalChildBalance = childVaults.reduce((s, v) => s + v.balance, 0);
+  const combinedBalance = vault.isMain ? vault.balance + totalChildBalance : vault.balance;
+
   const handleDeleteTx = (txId: string, desc: string) => {
     Alert.alert("Delete Transaction", `Delete "${desc}"?`, [
       { text: "Cancel", style: "cancel" },
@@ -72,48 +78,64 @@ export default function VaultDetailScreen() {
     ]);
   };
 
+  const tabs: { key: Tab; label: string; count: number }[] = [
+    { key: "transactions", label: "Transactions", count: vault.transactions.length },
+    ...(vault.isMain
+      ? [{ key: "sub-vaults" as Tab, label: "Sub-Vaults", count: childVaults.length }]
+      : []),
+    { key: "members", label: "Members", count: vault.members.length },
+  ];
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View
-        style={[styles.headerBar, { paddingTop: Platform.OS === "web" ? 67 : 0 }]}
-      >
+    <View
+      style={[
+        styles.container,
+        { paddingTop: Platform.OS === "web" ? 67 : insets.top },
+      ]}
+    >
+      {/* Header */}
+      <View style={styles.headerBar}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
           <Feather name="arrow-left" size={20} color={Colors.textPrimary} />
         </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {vault.name}
-        </Text>
-        <View style={styles.headerActions}>
-          <Pressable
-            style={styles.headerAction}
-            onPress={() =>
-              router.push({
-                pathname: "/members/[vaultId]",
-                params: { vaultId: vault.id },
-              })
-            }
-          >
-            <Feather name="users" size={18} color={Colors.textSecondary} />
-          </Pressable>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {vault.name}
+          </Text>
+          {vault.isMain && (
+            <View style={styles.headerBadge}>
+              <Feather name="shield" size={9} color={Colors.accent} />
+              <Text style={styles.headerBadgeText}>MAIN</Text>
+            </View>
+          )}
         </View>
+        <Pressable
+          style={styles.headerAction}
+          onPress={() =>
+            router.push({
+              pathname: "/members/[vaultId]",
+              params: { vaultId: vault.id },
+            })
+          }
+        >
+          <Feather name="users" size={18} color={Colors.textSecondary} />
+        </Pressable>
       </View>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          {
-            paddingBottom:
-              Platform.OS === "web" ? 100 : insets.bottom + 100,
-          },
+          { paddingBottom: Platform.OS === "web" ? 100 : insets.bottom + 100 },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View entering={FadeInDown.duration(400)} style={styles.balanceCard}>
-          <LinearGradient
-            colors={["#2A2050", "#1A1F3A"]}
-            style={styles.balanceGradient}
-          >
+        {/* Balance card */}
+        <Animated.View
+          entering={FadeInDown.duration(400)}
+          style={styles.balanceCard}
+        >
+          <LinearGradient colors={["#2A2050", "#1A1F3A"]} style={styles.balanceGradient}>
             <View style={styles.balanceIconRow}>
               <View
                 style={[
@@ -123,17 +145,35 @@ export default function VaultDetailScreen() {
               >
                 <Text style={styles.vaultIcon}>{vault.icon}</Text>
               </View>
-              {vault.isMain && (
-                <View style={styles.mainBadge}>
-                  <Text style={styles.mainBadgeText}>MAIN</Text>
+              {vault.isMain && childVaults.length > 0 && (
+                <View style={styles.childBadge}>
+                  <Feather name="git-branch" size={10} color={Colors.textSecondary} />
+                  <Text style={styles.childBadgeText}>
+                    {childVaults.length} sub-vault{childVaults.length !== 1 ? "s" : ""}
+                  </Text>
                 </View>
               )}
             </View>
 
-            <Text style={styles.balanceLabel}>Current Balance</Text>
-            <Text style={[styles.balance, { color: vault.color || Colors.accent }]}>
-              {formatCurrency(vault.balance)}
+            <Text style={styles.balanceLabel}>
+              {vault.isMain ? "Total Balance (incl. sub-vaults)" : "Current Balance"}
             </Text>
+            <Text style={[styles.balance, { color: vault.color || Colors.accent }]}>
+              {formatCurrency(combinedBalance)}
+            </Text>
+
+            {vault.isMain && childVaults.length > 0 && (
+              <View style={styles.ownBalanceRow}>
+                <Text style={styles.ownBalanceLabel}>Own balance:</Text>
+                <Text style={styles.ownBalanceValue}>
+                  {formatCurrency(vault.balance)}
+                </Text>
+                <Text style={styles.ownBalanceLabel}>  Sub-vaults:</Text>
+                <Text style={styles.ownBalanceValue}>
+                  {formatCurrency(totalChildBalance)}
+                </Text>
+              </View>
+            )}
 
             <View style={styles.statsRow}>
               <View style={styles.statBox}>
@@ -147,7 +187,9 @@ export default function VaultDetailScreen() {
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
-                <View style={[styles.statIcon, { backgroundColor: `${Colors.danger}18` }]}>
+                <View
+                  style={[styles.statIcon, { backgroundColor: `${Colors.danger}18` }]}
+                >
                   <Feather name="arrow-up-right" size={14} color={Colors.danger} />
                 </View>
                 <Text style={styles.statLabel}>Total Out</Text>
@@ -159,15 +201,13 @@ export default function VaultDetailScreen() {
           </LinearGradient>
         </Animated.View>
 
+        {/* Add transaction button */}
         <Animated.View
           entering={FadeInDown.duration(400).delay(100)}
           style={styles.addTxButton}
         >
           <Pressable
-            style={({ pressed }) => [
-              styles.addTxPressable,
-              { opacity: pressed ? 0.85 : 1 },
-            ]}
+            style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               router.push({
@@ -188,41 +228,37 @@ export default function VaultDetailScreen() {
           </Pressable>
         </Animated.View>
 
+        {/* Tabs */}
         <Animated.View
           entering={FadeInDown.duration(400).delay(150)}
           style={styles.tabsContainer}
         >
           <View style={styles.tabs}>
-            <Pressable
-              style={[styles.tab, activeTab === "transactions" && styles.activeTab]}
-              onPress={() => setActiveTab("transactions")}
-            >
-              <Text
+            {tabs.map((tab) => (
+              <Pressable
+                key={tab.key}
                 style={[
-                  styles.tabText,
-                  activeTab === "transactions" && styles.activeTabText,
+                  styles.tab,
+                  activeTab === tab.key && styles.activeTab,
                 ]}
+                onPress={() => setActiveTab(tab.key)}
               >
-                Transactions ({vault.transactions.length})
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.tab, activeTab === "members" && styles.activeTab]}
-              onPress={() => setActiveTab("members")}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "members" && styles.activeTabText,
-                ]}
-              >
-                Members ({vault.members.length})
-              </Text>
-            </Pressable>
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === tab.key && styles.activeTabText,
+                  ]}
+                >
+                  {tab.label}
+                  {tab.count > 0 ? ` (${tab.count})` : ""}
+                </Text>
+              </Pressable>
+            ))}
           </View>
         </Animated.View>
 
-        {activeTab === "transactions" ? (
+        {/* Tab content */}
+        {activeTab === "transactions" && (
           <Animated.View entering={FadeInDown.duration(300)}>
             {vault.transactions.length === 0 ? (
               <View style={styles.emptyState}>
@@ -238,9 +274,7 @@ export default function VaultDetailScreen() {
                   <React.Fragment key={tx.id}>
                     <TransactionItem
                       transaction={tx}
-                      onLongPress={() =>
-                        handleDeleteTx(tx.id, tx.description)
-                      }
+                      onLongPress={() => handleDeleteTx(tx.id, tx.description)}
                     />
                     {i < vault.transactions.length - 1 && (
                       <View style={styles.txSeparator} />
@@ -250,46 +284,119 @@ export default function VaultDetailScreen() {
               </View>
             )}
           </Animated.View>
-        ) : (
+        )}
+
+        {activeTab === "sub-vaults" && vault.isMain && (
+          <Animated.View entering={FadeInDown.duration(300)}>
+            {/* Add sub-vault button */}
+            <Pressable
+              style={styles.addChildBtn}
+              onPress={() =>
+                router.push({
+                  pathname: "/vault/create",
+                  params: { parentId: vault.id },
+                })
+              }
+            >
+              <Feather name="plus-circle" size={16} color={Colors.accent} />
+              <Text style={styles.addChildText}>Add Sub-Vault</Text>
+            </Pressable>
+
+            {childVaults.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Feather name="git-branch" size={32} color={Colors.muted} />
+                <Text style={styles.emptyTitle}>No sub-vaults yet</Text>
+                <Text style={styles.emptySubtitle}>
+                  Create sub-vaults like Home Expenses, Construction, or Marriage to organise your spending
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.childList}>
+                {childVaults.map((child) => {
+                  const childCredit = child.transactions
+                    .filter((t) => t.type === "credit")
+                    .reduce((s, t) => s + t.amount, 0);
+                  const childDebit = child.transactions
+                    .filter((t) => t.type === "debit")
+                    .reduce((s, t) => s + t.amount, 0);
+
+                  return (
+                    <Pressable
+                      key={child.id}
+                      style={({ pressed }) => [
+                        styles.childCard,
+                        { opacity: pressed ? 0.88 : 1 },
+                      ]}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push({
+                          pathname: "/vault/[id]",
+                          params: { id: child.id },
+                        });
+                      }}
+                    >
+                      <View
+                        style={[
+                          styles.childCardIcon,
+                          { backgroundColor: `${child.color}22` },
+                        ]}
+                      >
+                        <Text style={styles.childCardIconText}>{child.icon}</Text>
+                      </View>
+                      <View style={styles.childCardInfo}>
+                        <Text style={styles.childCardName}>{child.name}</Text>
+                        <View style={styles.childCardStats}>
+                          <Feather name="arrow-down-left" size={10} color={Colors.success} />
+                          <Text style={styles.childStatText}>{formatCurrency(childCredit)}</Text>
+                          <Text style={styles.childStatSep}>·</Text>
+                          <Feather name="arrow-up-right" size={10} color={Colors.danger} />
+                          <Text style={styles.childStatText}>{formatCurrency(childDebit)}</Text>
+                          <Text style={styles.childStatSep}>·</Text>
+                          <Text style={styles.childStatText}>
+                            {child.transactions.length} txn{child.transactions.length !== 1 ? "s" : ""}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.childCardRight}>
+                        <Text style={[styles.childBalance, { color: child.color || Colors.accent }]}>
+                          {formatCurrency(child.balance)}
+                        </Text>
+                        <Feather name="chevron-right" size={14} color={Colors.muted} />
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </Animated.View>
+        )}
+
+        {activeTab === "members" && (
           <Animated.View entering={FadeInDown.duration(300)} style={styles.membersList}>
             {vault.members.map((m, i) => (
-              <View key={m.id} style={styles.memberRow}>
-                <LinearGradient
-                  colors={[Colors.accent, Colors.accentLight]}
-                  style={styles.memberAvatar}
-                >
-                  <Text style={styles.memberAvatarText}>
-                    {m.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .toUpperCase()
-                      .slice(0, 2)}
-                  </Text>
-                </LinearGradient>
-                <View style={styles.memberInfo}>
-                  <Text style={styles.memberName}>{m.name}</Text>
-                  {m.email || m.phone ? (
-                    <Text style={styles.memberContact}>
-                      {m.email || m.phone}
-                    </Text>
-                  ) : null}
-                </View>
-                <View
-                  style={[
-                    styles.roleBadge,
-                    m.role === "admin" && styles.adminBadge,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.roleText,
-                      m.role === "admin" && styles.adminText,
-                    ]}
+              <View key={m.id}>
+                <View style={styles.memberRow}>
+                  <LinearGradient
+                    colors={[Colors.accent, Colors.accentLight]}
+                    style={styles.memberAvatar}
                   >
-                    {m.role}
-                  </Text>
+                    <Text style={styles.memberAvatarText}>
+                      {m.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
+                    </Text>
+                  </LinearGradient>
+                  <View style={styles.memberInfo}>
+                    <Text style={styles.memberName}>{m.name}</Text>
+                    {(m.email || m.phone) && (
+                      <Text style={styles.memberContact}>{m.email || m.phone}</Text>
+                    )}
+                  </View>
+                  <View style={[styles.roleBadge, m.role === "admin" && styles.adminBadge]}>
+                    <Text style={[styles.roleText, m.role === "admin" && styles.adminText]}>
+                      {m.role}
+                    </Text>
+                  </View>
                 </View>
+                {i < vault.members.length - 1 && <View style={styles.memberDivider} />}
               </View>
             ))}
             <Pressable
@@ -312,10 +419,7 @@ export default function VaultDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.primary,
-  },
+  container: { flex: 1, backgroundColor: Colors.primary },
   centered: {
     flex: 1,
     alignItems: "center",
@@ -355,16 +459,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  headerTitle: {
+  headerCenter: {
     flex: 1,
+    alignItems: "flex-start",
+  },
+  headerTitle: {
     fontFamily: "Inter_700Bold",
     fontSize: 18,
     color: Colors.textPrimary,
     letterSpacing: -0.3,
   },
-  headerActions: {
+  headerBadge: {
     flexDirection: "row",
-    gap: 8,
+    alignItems: "center",
+    gap: 4,
+    marginTop: 1,
+  },
+  headerBadgeText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 10,
+    color: Colors.accent,
+    letterSpacing: 0.8,
   },
   headerAction: {
     width: 40,
@@ -378,6 +493,7 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1 },
   content: { paddingTop: 4 },
+
   balanceCard: {
     marginHorizontal: 20,
     borderRadius: 22,
@@ -386,9 +502,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     marginBottom: 14,
   },
-  balanceGradient: {
-    padding: 22,
-  },
+  balanceGradient: { padding: 22 },
   balanceIconRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -403,44 +517,59 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   vaultIcon: { fontSize: 26 },
-  mainBadge: {
-    backgroundColor: "rgba(212,168,67,0.2)",
+  childBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: Colors.surface,
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  mainBadgeText: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 10,
-    color: Colors.accent,
-    letterSpacing: 1.2,
+  childBadgeText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+    color: Colors.textSecondary,
   },
   balanceLabel: {
     fontFamily: "Inter_400Regular",
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   balance: {
     fontFamily: "Inter_700Bold",
-    fontSize: 36,
+    fontSize: 34,
     letterSpacing: -1,
-    marginBottom: 20,
+    marginBottom: 4,
+  },
+  ownBalanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 14,
+    flexWrap: "wrap",
+  },
+  ownBalanceLabel: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: Colors.textSecondary,
+  },
+  ownBalanceValue: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: Colors.textPrimary,
   },
   statsRow: {
     flexDirection: "row",
     backgroundColor: "rgba(0,0,0,0.2)",
     borderRadius: 14,
     padding: 14,
-    gap: 8,
+    marginTop: 8,
   },
-  statBox: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-  },
+  statBox: { flex: 1, alignItems: "center", gap: 4 },
   statIcon: {
     width: 28,
     height: 28,
@@ -454,21 +583,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.textSecondary,
   },
-  statValue: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 15,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: Colors.border,
-  },
+  statValue: { fontFamily: "Inter_700Bold", fontSize: 15 },
+  statDivider: { width: 1, backgroundColor: Colors.border },
+
   addTxButton: {
     marginHorizontal: 20,
     marginBottom: 14,
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  addTxPressable: {
     borderRadius: 16,
     overflow: "hidden",
   },
@@ -484,10 +604,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.primary,
   },
-  tabsContainer: {
-    marginHorizontal: 20,
-    marginBottom: 14,
-  },
+
+  tabsContainer: { marginHorizontal: 20, marginBottom: 14 },
   tabs: {
     flexDirection: "row",
     backgroundColor: Colors.surface,
@@ -502,23 +620,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 10,
   },
-  activeTab: {
-    backgroundColor: Colors.surfaceLight,
-  },
+  activeTab: { backgroundColor: Colors.surfaceLight },
   tabText: {
     fontFamily: "Inter_500Medium",
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.textSecondary,
   },
   activeTabText: {
     color: Colors.accent,
     fontFamily: "Inter_600SemiBold",
   },
-  emptyState: {
-    alignItems: "center",
-    padding: 40,
-    gap: 10,
-  },
+
+  emptyState: { alignItems: "center", padding: 40, gap: 10 },
   emptyTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 16,
@@ -531,6 +644,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
+
   txList: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
@@ -544,10 +658,76 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.border,
     marginLeft: 20 + 42 + 14,
   },
-  membersList: {
+
+  /* Sub-vaults tab */
+  addChildBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: `${Colors.accent}18`,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     marginHorizontal: 20,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignSelf: "flex-start",
+  },
+  addChildText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    color: Colors.accent,
+  },
+  childList: {
+    marginHorizontal: 20,
+    gap: 10,
+  },
+  childCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+    gap: 12,
+  },
+  childCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  childCardIconText: { fontSize: 22 },
+  childCardInfo: { flex: 1 },
+  childCardName: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  childCardStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexWrap: "wrap",
+  },
+  childStatText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: Colors.textSecondary,
+  },
+  childStatSep: { color: Colors.muted, fontSize: 11 },
+  childCardRight: { alignItems: "flex-end", gap: 4 },
+  childBalance: { fontFamily: "Inter_700Bold", fontSize: 15 },
+
+  /* Members tab */
+  membersList: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
+    marginHorizontal: 20,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
@@ -557,8 +737,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
   memberAvatar: {
     width: 40,
@@ -572,9 +750,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.primary,
   },
-  memberInfo: {
-    flex: 1,
-  },
+  memberInfo: { flex: 1 },
   memberName: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
@@ -603,8 +779,11 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textTransform: "capitalize",
   },
-  adminText: {
-    color: Colors.accent,
+  adminText: { color: Colors.accent },
+  memberDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginLeft: 68,
   },
   addMemberBtn: {
     flexDirection: "row",

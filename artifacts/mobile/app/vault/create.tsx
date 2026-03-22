@@ -19,32 +19,28 @@ import Colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { useVaults } from "@/context/VaultContext";
 
-const ICONS = ["🏠", "🏗️", "💒", "🚗", "🎓", "🏥", "✈️", "🛒", "💰", "🏦", "📦", "🎯"];
+const ICONS = [
+  "🏠","🏗️","💒","🚗","🎓","🏥","✈️","🛒","💰","🏦","📦","🎯",
+  "🍔","⚡","🌿","💎","🎮","🎸","🏋️","🧳",
+];
 const COLORS = [
-  "#D4A843",
-  "#2ECC8A",
-  "#5B8EF0",
-  "#E85C5C",
-  "#9B59B6",
-  "#E67E22",
-  "#1ABC9C",
-  "#E91E63",
-  "#F39C12",
-  "#16A085",
+  "#D4A843","#2ECC8A","#5B8EF0","#E85C5C","#9B59B6",
+  "#E67E22","#1ABC9C","#E91E63","#F39C12","#16A085",
 ];
 
 export default function CreateVaultScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { createVault } = useVaults();
-  const params = useLocalSearchParams<{ isMain?: string }>();
+  const { createVault, mainVault } = useVaults();
+  const params = useLocalSearchParams<{ isMain?: string; parentId?: string }>();
 
   const isMain = params.isMain === "true";
+  const parentId = params.parentId;
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [initialBalance, setInitialBalance] = useState("");
-  const [selectedIcon, setSelectedIcon] = useState("🏠");
+  const [selectedIcon, setSelectedIcon] = useState(isMain ? "🏠" : "📦");
   const [selectedColor, setSelectedColor] = useState(Colors.accent);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -68,6 +64,7 @@ export default function CreateVaultScreen() {
         color: selectedColor,
         initialBalance: balance,
         isMain,
+        parentId: isMain ? undefined : (parentId || mainVault?.id),
         ownerId: user.id,
         ownerName: user.name,
       });
@@ -80,6 +77,8 @@ export default function CreateVaultScreen() {
       setIsLoading(false);
     }
   };
+
+  const screenTitle = isMain ? "Create Main Vault" : "Create Sub-Vault";
 
   return (
     <View
@@ -95,9 +94,7 @@ export default function CreateVaultScreen() {
         <Pressable style={styles.closeBtn} onPress={() => router.back()}>
           <Feather name="x" size={20} color={Colors.textSecondary} />
         </Pressable>
-        <Text style={styles.headerTitle}>
-          {isMain ? "Create Main Vault" : "Create Vault"}
-        </Text>
+        <Text style={styles.headerTitle}>{screenTitle}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -109,6 +106,7 @@ export default function CreateVaultScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Live preview */}
         <View style={styles.preview}>
           <View
             style={[
@@ -119,9 +117,34 @@ export default function CreateVaultScreen() {
             <Text style={styles.previewIconText}>{selectedIcon}</Text>
           </View>
           <Text style={styles.previewName}>{name || "Vault Name"}</Text>
-          {isMain && (
-            <View style={styles.mainTag}>
-              <Text style={styles.mainTagText}>MAIN VAULT</Text>
+          <View
+            style={[
+              styles.typeBadge,
+              isMain
+                ? { backgroundColor: `${Colors.accent}20`, borderColor: Colors.accent }
+                : { backgroundColor: Colors.surface, borderColor: Colors.border },
+            ]}
+          >
+            {isMain ? (
+              <Feather name="shield" size={10} color={Colors.accent} />
+            ) : (
+              <Feather name="git-branch" size={10} color={Colors.textSecondary} />
+            )}
+            <Text
+              style={[
+                styles.typeBadgeText,
+                isMain
+                  ? { color: Colors.accent }
+                  : { color: Colors.textSecondary },
+              ]}
+            >
+              {isMain ? "MAIN VAULT" : "SUB-VAULT"}
+            </Text>
+          </View>
+          {!isMain && mainVault && (
+            <View style={styles.parentChip}>
+              <Text style={styles.parentChipIcon}>{mainVault.icon}</Text>
+              <Text style={styles.parentChipText}>Under {mainVault.name}</Text>
             </View>
           )}
         </View>
@@ -139,26 +162,26 @@ export default function CreateVaultScreen() {
             <Feather name="edit-2" size={16} color={Colors.textSecondary} />
             <TextInput
               style={styles.input}
-              placeholder="e.g. Home Expenses"
+              placeholder={isMain ? "e.g. My Home Vault" : "e.g. Home Expenses"}
               placeholderTextColor={Colors.textTertiary}
               value={name}
               onChangeText={setName}
             />
           </View>
 
-          <Text style={styles.fieldLabel}>Description</Text>
+          <Text style={styles.fieldLabel}>Description (optional)</Text>
           <View style={styles.inputWrapper}>
             <Feather name="align-left" size={16} color={Colors.textSecondary} />
             <TextInput
               style={styles.input}
-              placeholder="Optional description"
+              placeholder="What is this vault for?"
               placeholderTextColor={Colors.textTertiary}
               value={description}
               onChangeText={setDescription}
             />
           </View>
 
-          <Text style={styles.fieldLabel}>Initial Balance (₹)</Text>
+          <Text style={styles.fieldLabel}>Opening Balance (₹)</Text>
           <View style={styles.inputWrapper}>
             <Text style={styles.currencySymbol}>₹</Text>
             <TextInput
@@ -238,8 +261,14 @@ export default function CreateVaultScreen() {
               <ActivityIndicator color={Colors.primary} />
             ) : (
               <>
-                <Feather name="shield" size={18} color={Colors.primary} />
-                <Text style={styles.createText}>Create Vault</Text>
+                <Feather
+                  name={isMain ? "shield" : "git-branch"}
+                  size={18}
+                  color={Colors.primary}
+                />
+                <Text style={styles.createText}>
+                  {isMain ? "Create Main Vault" : "Create Sub-Vault"}
+                </Text>
               </>
             )}
           </LinearGradient>
@@ -250,10 +279,7 @@ export default function CreateVaultScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.primary,
-  },
+  container: { flex: 1, backgroundColor: Colors.primary },
   headerBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -277,14 +303,12 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     textAlign: "center",
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 4,
-  },
+  content: { paddingHorizontal: 20, paddingTop: 4 },
   preview: {
     alignItems: "center",
     paddingVertical: 24,
     marginBottom: 16,
+    gap: 8,
   },
   previewIcon: {
     width: 72,
@@ -292,31 +316,45 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: 4,
   },
-  previewIconText: {
-    fontSize: 34,
-  },
+  previewIconText: { fontSize: 34 },
   previewName: {
     fontFamily: "Inter_700Bold",
     fontSize: 20,
     color: Colors.textPrimary,
     letterSpacing: -0.3,
   },
-  mainTag: {
-    marginTop: 8,
-    backgroundColor: `${Colors.accent}20`,
+  typeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: Colors.border,
   },
-  mainTagText: {
+  typeBadgeText: {
     fontFamily: "Inter_700Bold",
     fontSize: 10,
-    color: Colors.accent,
-    letterSpacing: 1.2,
+    letterSpacing: 1,
+  },
+  parentChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Colors.surface,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  parentChipIcon: { fontSize: 14 },
+  parentChipText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    color: Colors.textSecondary,
   },
   errorBox: {
     flexDirection: "row",
@@ -333,9 +371,7 @@ const styles = StyleSheet.create({
     color: Colors.danger,
     flex: 1,
   },
-  formSection: {
-    marginBottom: 20,
-  },
+  formSection: { marginBottom: 20 },
   fieldLabel: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
@@ -367,11 +403,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: Colors.accent,
   },
-  iconGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
+  iconGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   iconOption: {
     width: 52,
     height: 52,
@@ -382,17 +414,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  iconSelected: {
-    borderWidth: 2,
-  },
-  iconOptionText: {
-    fontSize: 24,
-  },
-  colorGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
+  iconSelected: { borderWidth: 2 },
+  iconOptionText: { fontSize: 24 },
+  colorGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   colorOption: {
     width: 44,
     height: 44,
@@ -400,15 +424,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  colorSelected: {
-    borderWidth: 3,
-    borderColor: "white",
-  },
-  createButton: {
-    borderRadius: 16,
-    overflow: "hidden",
-    marginTop: 8,
-  },
+  colorSelected: { borderWidth: 3, borderColor: "white" },
+  createButton: { borderRadius: 16, overflow: "hidden", marginTop: 8 },
   createGradient: {
     flexDirection: "row",
     alignItems: "center",
