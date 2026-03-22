@@ -1,0 +1,117 @@
+
+Improve below promot
+Create an app for home expenses management 
+It should have mail vault like my expenses or vault 
+From main vault can create multiple vault 1 for home expenses 2 home construction 3 merrage expenses etc
+Suppose  home expenses have current value is 1000, added 5000 used 1000, added 6000 etc 
+For example home construction current balance is 5000, added 1000, 4000, 10000, 3000 used 2000, 1000,6000, added 1000
+Main vault will  current  1500 etc 
+It's  should support 
+1 search functionality 
+2 add remove  user to child or main vault
+3 shourd support upload image features 
+4 export full vauly in excel functionality 
+5 login by mail id or mobile number 
+6 clean and mordan ui
+
+Here’s a cleaner, more structured, and more “developer-ready” version of your prompt:
+
+Prompt: Home Expense Management App
+
+Design and develop a modern Home Expense Management Application with a vault-based financial tracking system.
+
+Core Concept
+The app should have a Main Vault (overall balance).
+
+Users can create multiple child vaults under the main vault, such as:
+
+Home Expenses
+
+Home Construction
+
+Marriage Expenses
+
+Custom categories
+
+Vault Behavior
+Each vault should:
+
+Maintain a current balance
+
+Track all transactions:
+
+Add (credit)
+
+Use (debit)
+
+Automatically update the balance after each transaction
+
+Example Scenarios
+Home Expenses Vault
+
+Initial: 1000
+
++5000 → 6000
+
+-1000 → 5000
+
++6000 → 11000
+
+Home Construction Vault
+
+Initial: 5000
+
++1000, +4000, +10000, +3000
+
+-2000, -1000, -6000
+
++1000
+
+Final balance calculated dynamically
+
+Main Vault
+
+Should reflect aggregated balance or independent tracking (configurable)
+
+Key Features
+Search Functionality
+
+Search transactions by amount, date, vault, or keyword
+
+User Management
+
+Add/remove users to:
+
+Main vault
+
+Individual child vaults
+
+Role-based access (Admin / Member)
+
+Image Upload
+
+Attach receipts or proof images to transactions
+
+Export Feature
+
+Export full vault data (transactions + balances) to Excel
+
+Authentication
+
+Login using:
+
+Email ID
+
+Mobile number (OTP-based)
+
+UI/UX
+
+Clean, modern, mobile-first interface
+
+Dashboard showing:
+
+Total balance
+
+Vault-wise breakdown
+
+Recent transactions

@@ -1,22 +1,28 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Home Vault Expense Manager API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: vaults
+    description: Vault operations
+  - name: transactions
+    description: Transaction operations
+  - name: users
+    description: User management
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +30,265 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with email or phone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  /vaults:
+    get:
+      operationId: getVaults
+      tags: [vaults]
+      summary: Get all vaults for the current user
+      responses:
+        "200":
+          description: List of vaults
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Vault"
+    post:
+      operationId: createVault
+      tags: [vaults]
+      summary: Create a new vault
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVaultRequest"
+      responses:
+        "201":
+          description: Vault created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vault"
+
+  /vaults/{vaultId}:
+    get:
+      operationId: getVault
+      tags: [vaults]
+      summary: Get vault by ID
+      parameters:
+        - name: vaultId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Vault details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VaultDetail"
+    put:
+      operationId: updateVault
+      tags: [vaults]
+      summary: Update vault
+      parameters:
+        - name: vaultId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateVaultRequest"
+      responses:
+        "200":
+          description: Vault updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vault"
+    delete:
+      operationId: deleteVault
+      tags: [vaults]
+      summary: Delete vault
+      parameters:
+        - name: vaultId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Vault deleted
+
+  /vaults/{vaultId}/transactions:
+    get:
+      operationId: getTransactions
+      tags: [transactions]
+      summary: Get transactions for a vault
+      parameters:
+        - name: vaultId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+    post:
+      operationId: createTransaction
+      tags: [transactions]
+      summary: Create a transaction
+      parameters:
+        - name: vaultId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTransactionRequest"
+      responses:
+        "201":
+          description: Transaction created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+
+  /vaults/{vaultId}/members:
+    get:
+      operationId: getVaultMembers
+      tags: [users]
+      summary: Get vault members
+      parameters:
+        - name: vaultId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of vault members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VaultMember"
+    post:
+      operationId: addVaultMember
+      tags: [users]
+      summary: Add a member to vault
+      parameters:
+        - name: vaultId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddMemberRequest"
+      responses:
+        "201":
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VaultMember"
+
+  /vaults/{vaultId}/members/{memberId}:
+    delete:
+      operationId: removeVaultMember
+      tags: [users]
+      summary: Remove a member from vault
+      parameters:
+        - name: vaultId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Member removed
+
+  /transactions/{transactionId}:
+    delete:
+      operationId: deleteTransaction
+      tags: [transactions]
+      summary: Delete a transaction
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Transaction deleted
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +299,249 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+        - message
+
+    LoginRequest:
+      type: object
+      properties:
+        identifier:
+          type: string
+          description: Email or phone number
+        password:
+          type: string
+      required:
+        - identifier
+        - password
+
+    RegisterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        password:
+          type: string
+      required:
+        - name
+        - password
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - token
+        - user
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - createdAt
+
+    Vault:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        color:
+          type: string
+        balance:
+          type: number
+        isMain:
+          type: boolean
+        parentId:
+          type: string
+        ownerId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        transactionCount:
+          type: number
+      required:
+        - id
+        - name
+        - balance
+        - isMain
+        - ownerId
+        - createdAt
+        - transactionCount
+
+    VaultDetail:
+      allOf:
+        - $ref: "#/components/schemas/Vault"
+        - type: object
+          properties:
+            transactions:
+              type: array
+              items:
+                $ref: "#/components/schemas/Transaction"
+            members:
+              type: array
+              items:
+                $ref: "#/components/schemas/VaultMember"
+          required:
+            - transactions
+            - members
+
+    CreateVaultRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        color:
+          type: string
+        initialBalance:
+          type: number
+        isMain:
+          type: boolean
+        parentId:
+          type: string
+      required:
+        - name
+
+    UpdateVaultRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        color:
+          type: string
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+        vaultId:
+          type: string
+        type:
+          type: string
+          enum: [credit, debit]
+        amount:
+          type: number
+        description:
+          type: string
+        imageUrl:
+          type: string
+        createdById:
+          type: string
+        createdByName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        balanceAfter:
+          type: number
+      required:
+        - id
+        - vaultId
+        - type
+        - amount
+        - description
+        - createdById
+        - createdByName
+        - createdAt
+        - balanceAfter
+
+    CreateTransactionRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [credit, debit]
+        amount:
+          type: number
+        description:
+          type: string
+        imageUrl:
+          type: string
+      required:
+        - type
+        - amount
+        - description
+
+    VaultMember:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        vaultId:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [admin, member]
+        joinedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - vaultId
+        - name
+        - role
+        - joinedAt
+
+    AddMemberRequest:
+      type: object
+      properties:
+        identifier:
+          type: string
+          description: Email or phone number of user to add
+        role:
+          type: string
+          enum: [admin, member]
+      required:
+        - identifier
+        - role
