@@ -80,21 +80,28 @@ function MainVaultBlock({
           </View>
 
           <View style={styles.mainVaultBalanceRow}>
-            <View>
-              <Text style={styles.balanceLabel}>Available</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.balanceLabel}>Total Balance</Text>
               <Text style={[styles.mainVaultBalance, { color: mainVault.color || Colors.accent }]}>
-                {formatCurrency(mainVault.balance)}
+                {formatCurrency(totalIn)}
               </Text>
-            </View>
-            {childVaults.length > 0 && (
-              <View style={styles.subBalanceBox}>
-                <Text style={styles.subBalanceLabel}>Allocated to sub-vaults</Text>
-                <Text style={styles.subBalanceValue}>{formatCurrency(totalAllocated)}</Text>
-                <Text style={[styles.subBalanceLabel, { marginTop: 2 }]}>
-                  of {formatCurrency(totalIn)} total
-                </Text>
+              <View style={styles.mainVaultSubRow}>
+                <View style={styles.miniPill}>
+                  <Feather name="check-circle" size={10} color={Colors.success} />
+                  <Text style={[styles.miniPillText, { color: Colors.success }]}>
+                    Available {formatCurrency(mainVault.balance)}
+                  </Text>
+                </View>
+                {totalAllocated > 0 && (
+                  <View style={[styles.miniPill, { backgroundColor: "rgba(167,139,250,0.1)", borderColor: "rgba(167,139,250,0.25)" }]}>
+                    <Feather name="send" size={10} color="#A78BFA" />
+                    <Text style={[styles.miniPillText, { color: "#A78BFA" }]}>
+                      Allocated {formatCurrency(totalAllocated)}
+                    </Text>
+                  </View>
+                )}
               </View>
-            )}
+            </View>
           </View>
         </LinearGradient>
       </Pressable>

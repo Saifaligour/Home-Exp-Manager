@@ -239,6 +239,20 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       const vault = vaults.find((v) => v.id === vaultId);
       if (!vault) throw new Error("Vault not found");
 
+      // Main vault: direct debits are not allowed — it is a fund source only
+      if (vault.isMain && data.type === "debit") {
+        throw new Error(
+          "MAIN_VAULT_NO_DEBIT: Spending is not allowed directly from a Main Vault. Use 'Allocate' to move funds to a sub-vault first."
+        );
+      }
+
+      // Child vault: block spending if there is not enough balance
+      if (!vault.isMain && data.type === "debit" && vault.balance < data.amount) {
+        throw new Error(
+          `INSUFFICIENT_BALANCE: Not enough funds. Sub-vault balance is ₹${vault.balance.toLocaleString("en-IN")}. Transfer more from the Main Vault first.`
+        );
+      }
+
       const newBalance =
         data.type === "credit"
           ? vault.balance + data.amount

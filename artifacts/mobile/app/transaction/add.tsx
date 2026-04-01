@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
@@ -21,7 +22,9 @@ import Colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { useVaults } from "@/context/VaultContext";
 
-type TxMode = "credit" | "debit" | "transfer";
+type MainMode = "credit" | "allocate";
+type ChildMode = "debit" | "credit";
+type TxMode = MainMode | ChildMode;
 
 function formatCurrency(amount: number): string {
   if (amount >= 100000) return `₹${(amount / 100000).toFixed(2)}L`;
@@ -35,11 +38,19 @@ export default function AddTransactionScreen() {
   const { vaults, addTransaction, transferToChild } = useVaults();
 
   const vault = vaults.find((v) => v.id === vaultId);
-  const childVaults = vault?.isMain
+  const isMain = vault?.isMain ?? false;
+
+  // For main vaults: find the parent to get its id (for allocate prompt)
+  const parentVault = !isMain && vault?.parentId
+    ? vaults.find((v) => v.id === vault.parentId)
+    : null;
+
+  const childVaults = isMain && vault
     ? vaults.filter((v) => !v.isMain && v.parentId === vault.id)
     : [];
 
-  const [mode, setMode] = useState<TxMode>("debit");
+  // Default mode: main vault → credit; child vault → debit
+  const [mode, setMode] = useState<TxMode>(isMain ? "credit" : "debit");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -48,6 +59,7 @@ export default function AddTransactionScreen() {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [insufficientFunds, setInsufficientFunds] = useState(false);
 
   const handlePickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -73,14 +85,14 @@ export default function AddTransactionScreen() {
     }
     if (!user || !vaultId) return;
 
-    if (mode === "transfer") {
+    if (mode === "allocate") {
       if (!selectedChildId) {
-        setError("Please select a child vault to allocate to");
+        setError("Please select a sub-vault to allocate to");
         return;
       }
       if (vault && amountNum > vault.balance) {
         setError(
-          `Insufficient balance. Available: ${formatCurrency(vault.balance)}`
+          `Available balance is only ${formatCurrency(vault.balance)}. You cannot allocate more than what is available.`
         );
         return;
       }
@@ -93,9 +105,10 @@ export default function AddTransactionScreen() {
 
     setIsLoading(true);
     setError("");
+    setInsufficientFunds(false);
 
     try {
-      if (mode === "transfer") {
+      if (mode === "allocate") {
         const childVault = vaults.find((v) => v.id === selectedChildId);
         await transferToChild({
           fromVaultId: vaultId,
@@ -107,7 +120,7 @@ export default function AddTransactionScreen() {
         });
       } else {
         await addTransaction(vaultId, {
-          type: mode,
+          type: mode as "credit" | "debit",
           amount: amountNum,
           description: description.trim(),
           imageUrl: imageUri || undefined,
@@ -119,25 +132,41 @@ export default function AddTransactionScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (e: any) {
-      setError(e?.message || "Failed to add transaction. Try again.");
+      const msg: string = e?.message ?? "";
+      if (msg.startsWith("INSUFFICIENT_BALANCE:")) {
+        setInsufficientFunds(true);
+        setError(msg.replace("INSUFFICIENT_BALANCE: ", ""));
+      } else if (msg.startsWith("MAIN_VAULT_NO_DEBIT:")) {
+        setError(msg.replace("MAIN_VAULT_NO_DEBIT: ", ""));
+      } else {
+        setError(msg || "Failed to add transaction. Try again.");
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ─── Colors & gradients by mode ────────────────────────────────────────────
   const modeColor =
     mode === "credit"
       ? Colors.success
-      : mode === "transfer"
+      : mode === "allocate"
       ? "#A78BFA"
       : Colors.danger;
 
   const gradientColors: [string, string] =
     mode === "credit"
       ? [Colors.success, "#40E09A"]
-      : mode === "transfer"
+      : mode === "allocate"
       ? ["#A78BFA", "#C4B5FD"]
       : [Colors.danger, "#F07070"];
+
+  // ─── Main vault stat: total deposited vs available ─────────────────────────
+  const mainTotalIn = isMain && vault
+    ? vault.transactions
+        .filter((t) => t.type === "credit")
+        .reduce((s, t) => s + t.amount, 0)
+    : 0;
 
   return (
     <View
@@ -149,11 +178,18 @@ export default function AddTransactionScreen() {
         },
       ]}
     >
+      {/* Header */}
       <View style={styles.headerBar}>
         <Pressable style={styles.closeBtn} onPress={() => router.back()}>
           <Feather name="x" size={20} color={Colors.textSecondary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Add Transaction</Text>
+        <Text style={styles.headerTitle}>
+          {isMain
+            ? mode === "allocate"
+              ? "Allocate Funds"
+              : "Add Funds"
+            : "Record Expense"}
+        </Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -171,118 +207,169 @@ export default function AddTransactionScreen() {
             <Text style={styles.vaultChipIcon}>{vault.icon}</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.vaultChipName}>{vault.name}</Text>
-              <Text style={styles.vaultChipSub}>
-                Available: {formatCurrency(vault.balance)}
-              </Text>
+              {isMain ? (
+                <Text style={styles.vaultChipSub}>
+                  Total: {formatCurrency(mainTotalIn)} · Available: {formatCurrency(vault.balance)}
+                </Text>
+              ) : (
+                <Text style={styles.vaultChipSub}>
+                  Balance: {formatCurrency(vault.balance)}
+                </Text>
+              )}
             </View>
             <Text style={[styles.vaultChipBalance, { color: vault.color }]}>
-              {formatCurrency(vault.balance)}
+              {formatCurrency(isMain ? mainTotalIn : vault.balance)}
             </Text>
           </View>
         )}
 
-        {/* Mode toggle */}
-        <View style={styles.typeToggle}>
-          <Pressable
-            style={[
-              styles.typeBtn,
-              mode === "debit" && styles.typeBtnActive,
-              mode === "debit" && { borderColor: Colors.danger },
-            ]}
-            onPress={() => {
-              setMode("debit");
-              Haptics.selectionAsync();
-            }}
-          >
-            <Feather
-              name="arrow-up-right"
-              size={16}
-              color={mode === "debit" ? Colors.danger : Colors.muted}
-            />
-            <Text
-              style={[
-                styles.typeBtnText,
-                mode === "debit" && { color: Colors.danger },
-              ]}
-            >
-              Debit
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.typeBtn,
-              mode === "credit" && styles.typeBtnActive,
-              mode === "credit" && { borderColor: Colors.success },
-            ]}
-            onPress={() => {
-              setMode("credit");
-              Haptics.selectionAsync();
-            }}
-          >
-            <Feather
-              name="arrow-down-left"
-              size={16}
-              color={mode === "credit" ? Colors.success : Colors.muted}
-            />
-            <Text
-              style={[
-                styles.typeBtnText,
-                mode === "credit" && { color: Colors.success },
-              ]}
-            >
-              Credit
-            </Text>
-          </Pressable>
-
-          {childVaults.length > 0 && (
+        {/* Mode tabs */}
+        {isMain ? (
+          /* MAIN VAULT: Credit or Allocate */
+          <View style={styles.typeToggle}>
             <Pressable
               style={[
                 styles.typeBtn,
-                mode === "transfer" && styles.typeBtnActive,
-                mode === "transfer" && { borderColor: "#A78BFA" },
+                mode === "credit" && styles.typeBtnActive,
+                mode === "credit" && { borderColor: Colors.success },
               ]}
               onPress={() => {
-                setMode("transfer");
+                setMode("credit");
+                setError("");
+                setInsufficientFunds(false);
                 Haptics.selectionAsync();
               }}
             >
               <Feather
-                name="send"
+                name="arrow-down-left"
                 size={16}
-                color={mode === "transfer" ? "#A78BFA" : Colors.muted}
+                color={mode === "credit" ? Colors.success : Colors.muted}
               />
-              <Text
-                style={[
-                  styles.typeBtnText,
-                  mode === "transfer" && { color: "#A78BFA" },
-                ]}
-              >
-                Allocate
+              <Text style={[styles.typeBtnText, mode === "credit" && { color: Colors.success }]}>
+                Add Funds
               </Text>
             </Pressable>
-          )}
-        </View>
 
-        {/* Transfer info banner */}
-        {mode === "transfer" && (
-          <View style={styles.transferBanner}>
+            {childVaults.length > 0 && (
+              <Pressable
+                style={[
+                  styles.typeBtn,
+                  mode === "allocate" && styles.typeBtnActive,
+                  mode === "allocate" && { borderColor: "#A78BFA" },
+                ]}
+                onPress={() => {
+                  setMode("allocate");
+                  setError("");
+                  setInsufficientFunds(false);
+                  Haptics.selectionAsync();
+                }}
+              >
+                <Feather
+                  name="send"
+                  size={16}
+                  color={mode === "allocate" ? "#A78BFA" : Colors.muted}
+                />
+                <Text style={[styles.typeBtnText, mode === "allocate" && { color: "#A78BFA" }]}>
+                  Allocate
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        ) : (
+          /* CHILD VAULT: Debit (spend) or Credit (manual top-up) */
+          <View style={styles.typeToggle}>
+            <Pressable
+              style={[
+                styles.typeBtn,
+                mode === "debit" && styles.typeBtnActive,
+                mode === "debit" && { borderColor: Colors.danger },
+              ]}
+              onPress={() => {
+                setMode("debit");
+                setError("");
+                setInsufficientFunds(false);
+                Haptics.selectionAsync();
+              }}
+            >
+              <Feather
+                name="arrow-up-right"
+                size={16}
+                color={mode === "debit" ? Colors.danger : Colors.muted}
+              />
+              <Text style={[styles.typeBtnText, mode === "debit" && { color: Colors.danger }]}>
+                Spend
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.typeBtn,
+                mode === "credit" && styles.typeBtnActive,
+                mode === "credit" && { borderColor: Colors.success },
+              ]}
+              onPress={() => {
+                setMode("credit");
+                setError("");
+                setInsufficientFunds(false);
+                Haptics.selectionAsync();
+              }}
+            >
+              <Feather
+                name="arrow-down-left"
+                size={16}
+                color={mode === "credit" ? Colors.success : Colors.muted}
+              />
+              <Text style={[styles.typeBtnText, mode === "credit" && { color: Colors.success }]}>
+                Refund
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Info banners */}
+        {mode === "allocate" && (
+          <View style={styles.infoBanner}>
             <Feather name="info" size={14} color="#A78BFA" />
-            <Text style={styles.transferBannerText}>
-              Move money from this vault into a child vault's budget
+            <Text style={styles.infoBannerText}>
+              Moves funds from this vault into a sub-vault's budget.
+              Main Vault total stays the same — only available balance changes.
             </Text>
           </View>
         )}
 
-        {/* Error */}
-        {error ? (
+        {/* Insufficient funds error with action */}
+        {insufficientFunds ? (
+          <View style={styles.insufficientBox}>
+            <View style={styles.insufficientHeader}>
+              <Feather name="alert-triangle" size={16} color={Colors.danger} />
+              <Text style={styles.insufficientTitle}>Insufficient Funds</Text>
+            </View>
+            <Text style={styles.insufficientText}>{error}</Text>
+            {parentVault && (
+              <Pressable
+                style={styles.allocateNowBtn}
+                onPress={() => {
+                  router.replace({
+                    pathname: "/transaction/add",
+                    params: { vaultId: parentVault.id },
+                  });
+                }}
+              >
+                <Feather name="send" size={14} color="#A78BFA" />
+                <Text style={styles.allocateNowText}>
+                  Go to {parentVault.name} → Allocate
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        ) : error ? (
           <View style={styles.errorBox}>
             <Feather name="alert-circle" size={14} color={Colors.danger} />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
 
-        {/* Amount */}
+        {/* Amount input */}
         <View style={styles.amountContainer}>
           <Text style={[styles.amountSymbol, { color: modeColor }]}>₹</Text>
           <TextInput
@@ -290,14 +377,18 @@ export default function AddTransactionScreen() {
             placeholder="0"
             placeholderTextColor={Colors.muted}
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={(v) => {
+              setAmount(v);
+              if (insufficientFunds) setInsufficientFunds(false);
+              if (error) setError("");
+            }}
             keyboardType="numeric"
             autoFocus
           />
         </View>
 
-        {/* Child vault picker — only for transfer mode */}
-        {mode === "transfer" && childVaults.length > 0 && (
+        {/* Child vault picker for allocate mode */}
+        {mode === "allocate" && childVaults.length > 0 && (
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Allocate To</Text>
             <View style={styles.childPickerList}>
@@ -322,7 +413,7 @@ export default function AddTransactionScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.childPickerName}>{child.name}</Text>
                       <Text style={styles.childPickerBalance}>
-                        Current: {formatCurrency(child.balance)}
+                        Current budget: {formatCurrency(child.balance)}
                       </Text>
                     </View>
                     {selected && (
@@ -338,16 +429,18 @@ export default function AddTransactionScreen() {
         {/* Description */}
         <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>
-            {mode === "transfer" ? "Note (optional)" : "Description"}
+            {mode === "allocate" ? "Note (optional)" : "Description"}
           </Text>
           <View style={styles.inputWrapper}>
             <Feather name="edit-2" size={16} color={Colors.textSecondary} />
             <TextInput
               style={styles.input}
               placeholder={
-                mode === "transfer"
+                mode === "allocate"
                   ? "e.g. Monthly house budget"
-                  : "What is this for?"
+                  : mode === "credit"
+                  ? "e.g. Salary, Income..."
+                  : "e.g. Groceries, Electricity..."
               }
               placeholderTextColor={Colors.textTertiary}
               value={description}
@@ -356,8 +449,8 @@ export default function AddTransactionScreen() {
           </View>
         </View>
 
-        {/* Receipt image — not for transfers */}
-        {mode !== "transfer" && (
+        {/* Receipt image — only for spend/refund */}
+        {mode !== "allocate" && (
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Receipt Image (Optional)</Text>
             {imageUri ? (
@@ -371,10 +464,7 @@ export default function AddTransactionScreen() {
                 </Pressable>
               </View>
             ) : (
-              <Pressable
-                style={styles.imagePickerBtn}
-                onPress={handlePickImage}
-              >
+              <Pressable style={styles.imagePickerBtn} onPress={handlePickImage}>
                 <Feather name="image" size={22} color={Colors.textSecondary} />
                 <Text style={styles.imagePickerText}>Attach receipt photo</Text>
               </Pressable>
@@ -382,6 +472,7 @@ export default function AddTransactionScreen() {
           </View>
         )}
 
+        {/* Submit */}
         <Pressable
           style={({ pressed }) => [
             styles.submitButton,
@@ -404,7 +495,7 @@ export default function AddTransactionScreen() {
                   name={
                     mode === "credit"
                       ? "arrow-down-left"
-                      : mode === "transfer"
+                      : mode === "allocate"
                       ? "send"
                       : "arrow-up-right"
                   }
@@ -413,10 +504,12 @@ export default function AddTransactionScreen() {
                 />
                 <Text style={styles.submitText}>
                   {mode === "credit"
-                    ? "Add Credit"
-                    : mode === "transfer"
+                    ? isMain
+                      ? "Add Funds to Vault"
+                      : "Record Refund"
+                    : mode === "allocate"
                     ? "Allocate Funds"
-                    : "Record Debit"}
+                    : "Record Expense"}
                 </Text>
               </>
             )}
@@ -428,10 +521,7 @@ export default function AddTransactionScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.primary,
-  },
+  container: { flex: 1, backgroundColor: Colors.primary },
   headerBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -455,9 +545,8 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     textAlign: "center",
   },
-  content: {
-    paddingHorizontal: 20,
-  },
+  content: { paddingHorizontal: 20 },
+
   vaultChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -470,9 +559,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginBottom: 16,
   },
-  vaultChipIcon: {
-    fontSize: 20,
-  },
+  vaultChipIcon: { fontSize: 20 },
   vaultChipName: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
@@ -482,17 +569,14 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
   },
   vaultChipBalance: {
     fontFamily: "Inter_700Bold",
     fontSize: 14,
   },
-  typeToggle: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 14,
-  },
+
+  typeToggle: { flexDirection: "row", gap: 8, marginBottom: 14 },
   typeBtn: {
     flex: 1,
     flexDirection: "row",
@@ -505,36 +589,37 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.border,
   },
-  typeBtnActive: {
-    backgroundColor: Colors.surfaceLight,
-  },
+  typeBtnActive: { backgroundColor: Colors.surfaceLight },
   typeBtnText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 12,
     color: Colors.muted,
   },
-  transferBanner: {
+
+  infoBanner: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 8,
-    backgroundColor: "rgba(167,139,250,0.1)",
-    borderRadius: 10,
+    backgroundColor: "rgba(167,139,250,0.08)",
+    borderRadius: 12,
     padding: 12,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: "rgba(167,139,250,0.3)",
+    borderColor: "rgba(167,139,250,0.25)",
   },
-  transferBannerText: {
+  infoBannerText: {
     fontFamily: "Inter_400Regular",
-    fontSize: 13,
+    fontSize: 12,
     color: "#C4B5FD",
     flex: 1,
+    lineHeight: 18,
   },
+
   errorBox: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(232, 92, 92, 0.15)",
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
     gap: 8,
     marginBottom: 16,
@@ -545,6 +630,51 @@ const styles = StyleSheet.create({
     color: Colors.danger,
     flex: 1,
   },
+
+  insufficientBox: {
+    backgroundColor: "rgba(232, 92, 92, 0.1)",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: `${Colors.danger}40`,
+    gap: 8,
+  },
+  insufficientHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  insufficientTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 14,
+    color: Colors.danger,
+  },
+  insufficientText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: Colors.textSecondary,
+    lineHeight: 19,
+  },
+  allocateNowBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(167,139,250,0.12)",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: "rgba(167,139,250,0.3)",
+    alignSelf: "flex-start",
+  },
+  allocateNowText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    color: "#A78BFA",
+  },
+
   amountContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -564,9 +694,8 @@ const styles = StyleSheet.create({
     minWidth: 100,
     textAlign: "center",
   },
-  fieldGroup: {
-    marginBottom: 16,
-  },
+
+  fieldGroup: { marginBottom: 16 },
   fieldLabel: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
@@ -574,9 +703,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     letterSpacing: 0.3,
   },
-  childPickerList: {
-    gap: 8,
-  },
+
+  childPickerList: { gap: 8 },
   childPickerItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -588,9 +716,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  childPickerIcon: {
-    fontSize: 22,
-  },
+  childPickerIcon: { fontSize: 22 },
   childPickerName: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
@@ -602,6 +728,7 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 2,
   },
+
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
@@ -620,6 +747,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     height: "100%",
   },
+
   imagePickerBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -642,11 +770,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: "hidden",
   },
-  imagePreview: {
-    width: "100%",
-    height: 180,
-    borderRadius: 14,
-  },
+  imagePreview: { width: "100%", height: 180, borderRadius: 14 },
   removeImageBtn: {
     position: "absolute",
     top: 10,
@@ -658,6 +782,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   submitButton: {
     borderRadius: 16,
     overflow: "hidden",

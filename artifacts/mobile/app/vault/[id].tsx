@@ -148,13 +148,32 @@ export default function VaultDetailScreen() {
               )}
             </View>
 
-            {/* Main vault: show available + allocated + children */}
+            {/* Main vault: Total balance (source of truth) + available breakdown */}
             {vault.isMain ? (
               <>
-                <Text style={styles.balanceLabel}>Available Balance</Text>
+                <Text style={styles.balanceLabel}>Total Balance</Text>
                 <Text style={[styles.balance, { color: vault.color || Colors.accent }]}>
-                  {formatCurrency(vault.balance)}
+                  {formatCurrency(stats?.totalIn ?? 0)}
                 </Text>
+
+                {/* Available breakdown pill */}
+                <View style={styles.availableRow}>
+                  <View style={styles.availablePill}>
+                    <Feather name="check-circle" size={12} color={Colors.success} />
+                    <Text style={styles.availablePillText}>
+                      Available: {formatCurrency(vault.balance)}
+                    </Text>
+                  </View>
+                  {(stats?.totalAllocated ?? 0) > 0 && (
+                    <View style={[styles.availablePill, { backgroundColor: "rgba(167,139,250,0.12)", borderColor: "rgba(167,139,250,0.3)" }]}>
+                      <Feather name="send" size={12} color="#A78BFA" />
+                      <Text style={[styles.availablePillText, { color: "#A78BFA" }]}>
+                        Allocated: {formatCurrency(stats?.totalAllocated ?? 0)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
                 <View style={styles.statsRow}>
                   <View style={styles.statBox}>
                     <View style={styles.statIcon}>
@@ -177,15 +196,16 @@ export default function VaultDetailScreen() {
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statBox}>
-                    <View style={[styles.statIcon, { backgroundColor: `${Colors.danger}18` }]}>
-                      <Feather name="arrow-up-right" size={14} color={Colors.danger} />
+                    <View style={[styles.statIcon, { backgroundColor: `${Colors.success}18` }]}>
+                      <Feather name="check-circle" size={14} color={Colors.success} />
                     </View>
-                    <Text style={styles.statLabel}>Spent</Text>
-                    <Text style={[styles.statValue, { color: Colors.danger }]}>
-                      {formatCurrency(stats?.totalOut ?? 0)}
+                    <Text style={styles.statLabel}>Available</Text>
+                    <Text style={[styles.statValue, { color: Colors.success }]}>
+                      {formatCurrency(vault.balance)}
                     </Text>
                   </View>
                 </View>
+
                 {childVaults.length > 0 && (
                   <View style={styles.childSummaryRow}>
                     <Feather name="git-branch" size={12} color={Colors.textSecondary} />
@@ -627,6 +647,29 @@ const styles = StyleSheet.create({
     fontSize: 34,
     letterSpacing: -1,
     marginBottom: 4,
+  },
+  availableRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 6,
+    marginBottom: 14,
+  },
+  availablePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: `${Colors.success}12`,
+    borderWidth: 1,
+    borderColor: `${Colors.success}30`,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  availablePillText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: Colors.success,
   },
   childSummaryRow: {
     flexDirection: "row",
