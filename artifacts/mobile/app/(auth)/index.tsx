@@ -16,11 +16,14 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { mockLoginResponse, buildSeedData } from "@/constants/mockData";
 import { useAuth } from "@/context/AuthContext";
+import { useVaults } from "@/context/VaultContext";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
+  const { seedVaults, vaults } = useVaults();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -36,23 +39,18 @@ export default function LoginScreen() {
     setIsLoading(true);
     setError("");
 
-    await new Promise((r) => setTimeout(r, 600));
+    // Simulate network delay (fake API call)
+    await new Promise((r) => setTimeout(r, 700));
 
-    const userId =
-      Date.now().toString() + Math.random().toString(36).substr(2, 5);
-    const name = identifier.includes("@")
-      ? identifier.split("@")[0]
-      : `User ${identifier.slice(-4)}`;
+    // Mock API response — replace with real fetch() when backend is ready
+    const response = mockLoginResponse(identifier.trim());
+    await login(response.user, response.token);
 
-    await login(
-      {
-        id: userId,
-        name: name.charAt(0).toUpperCase() + name.slice(1),
-        email: identifier.includes("@") ? identifier : undefined,
-        phone: !identifier.includes("@") ? identifier : undefined,
-      },
-      `token_${userId}`
-    );
+    // If this user has no vaults yet, seed demo data
+    if (vaults.length === 0) {
+      const seedData = buildSeedData(response.user.id, response.user.name);
+      await seedVaults(seedData);
+    }
 
     setIsLoading(false);
     router.replace("/(tabs)");
@@ -70,10 +68,7 @@ export default function LoginScreen() {
         <ScrollView
           contentContainerStyle={[
             styles.container,
-            {
-              paddingTop: insets.top + 40,
-              paddingBottom: insets.bottom + 40,
-            },
+            { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 40 },
           ]}
           keyboardShouldPersistTaps="handled"
         >
@@ -96,12 +91,7 @@ export default function LoginScreen() {
             ) : null}
 
             <View style={styles.inputWrapper}>
-              <Feather
-                name="mail"
-                size={18}
-                color={Colors.textSecondary}
-                style={styles.inputIcon}
-              />
+              <Feather name="mail" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Email or phone number"
@@ -115,12 +105,7 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.inputWrapper}>
-              <Feather
-                name="lock"
-                size={18}
-                color={Colors.textSecondary}
-                style={styles.inputIcon}
-              />
+              <Feather name="lock" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, styles.inputFlex]}
                 placeholder="Password"
@@ -129,10 +114,7 @@ export default function LoginScreen() {
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
               />
-              <Pressable
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeButton}
-              >
+              <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
                 <Feather
                   name={showPassword ? "eye-off" : "eye"}
                   size={18}
@@ -142,10 +124,7 @@ export default function LoginScreen() {
             </View>
 
             <Pressable
-              style={({ pressed }) => [
-                styles.loginButton,
-                { opacity: pressed ? 0.85 : 1 },
-              ]}
+              style={({ pressed }) => [styles.loginButton, { opacity: pressed ? 0.85 : 1 }]}
               onPress={handleLogin}
               disabled={isLoading}
             >
@@ -170,10 +149,7 @@ export default function LoginScreen() {
             </View>
 
             <Pressable
-              style={({ pressed }) => [
-                styles.registerButton,
-                { opacity: pressed ? 0.7 : 1 },
-              ]}
+              style={({ pressed }) => [styles.registerButton, { opacity: pressed ? 0.7 : 1 }]}
               onPress={() => router.push("/(auth)/register")}
             >
               <Text style={styles.registerButtonText}>Create new account</Text>
@@ -259,9 +235,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     height: 52,
   },
-  inputIcon: {
-    marginRight: 10,
-  },
+  inputIcon: { marginRight: 10 },
   input: {
     flex: 1,
     fontFamily: "Inter_400Regular",
@@ -269,21 +243,10 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     height: "100%",
   },
-  inputFlex: {
-    flex: 1,
-  },
-  eyeButton: {
-    padding: 4,
-  },
-  loginButton: {
-    borderRadius: 14,
-    overflow: "hidden",
-    marginTop: 4,
-  },
-  loginGradient: {
-    paddingVertical: 16,
-    alignItems: "center",
-  },
+  inputFlex: { flex: 1 },
+  eyeButton: { padding: 4 },
+  loginButton: { borderRadius: 14, overflow: "hidden", marginTop: 4 },
+  loginGradient: { paddingVertical: 16, alignItems: "center" },
   loginButtonText: {
     fontFamily: "Inter_700Bold",
     fontSize: 16,
@@ -296,11 +259,7 @@ const styles = StyleSheet.create({
     marginVertical: 20,
     gap: 12,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.border,
-  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
   dividerText: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,

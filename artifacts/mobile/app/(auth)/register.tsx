@@ -16,13 +16,14 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { buildSeedData, mockRegisterResponse } from "@/constants/mockData";
 import { useAuth } from "@/context/AuthContext";
 import { useVaults } from "@/context/VaultContext";
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
-  const { createVault } = useVaults();
+  const { seedVaults } = useVaults();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -43,29 +44,21 @@ export default function RegisterScreen() {
     setIsLoading(true);
     setError("");
 
-    await new Promise((r) => setTimeout(r, 600));
+    // Simulate network delay (fake API call)
+    await new Promise((r) => setTimeout(r, 800));
 
-    const userId =
-      Date.now().toString() + Math.random().toString(36).substr(2, 5);
-    const user = {
-      id: userId,
-      name: name.trim(),
-      email: email.trim() || undefined,
-      phone: phone.trim() || undefined,
-    };
+    // Mock API response
+    const response = mockRegisterResponse(
+      name.trim(),
+      email.trim() || undefined,
+      phone.trim() || undefined
+    );
 
-    await login(user, `token_${userId}`);
+    await login(response.user, response.token);
 
-    await createVault({
-      name: "Main Vault",
-      description: "Your primary financial vault",
-      icon: "🏦",
-      color: "#D4A843",
-      initialBalance: 0,
-      isMain: true,
-      ownerId: userId,
-      ownerName: name.trim(),
-    });
+    // Seed realistic demo data for the new user
+    const seedData = buildSeedData(response.user.id, response.user.name);
+    await seedVaults(seedData);
 
     setIsLoading(false);
     router.replace("/(tabs)");
@@ -83,17 +76,11 @@ export default function RegisterScreen() {
         <ScrollView
           contentContainerStyle={[
             styles.container,
-            {
-              paddingTop: insets.top + 24,
-              paddingBottom: insets.bottom + 40,
-            },
+            { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 40 },
           ]}
           keyboardShouldPersistTaps="handled"
         >
-          <Pressable
-            style={[styles.backButton]}
-            onPress={() => router.back()}
-          >
+          <Pressable style={styles.backButton} onPress={() => router.back()}>
             <Feather name="arrow-left" size={22} color={Colors.textPrimary} />
           </Pressable>
 
@@ -114,15 +101,10 @@ export default function RegisterScreen() {
 
             <Text style={styles.label}>Full Name</Text>
             <View style={styles.inputWrapper}>
-              <Feather
-                name="user"
-                size={18}
-                color={Colors.textSecondary}
-                style={styles.inputIcon}
-              />
+              <Feather name="user" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="John Doe"
+                placeholder="Rahul Sharma"
                 placeholderTextColor={Colors.textTertiary}
                 value={name}
                 onChangeText={setName}
@@ -132,12 +114,7 @@ export default function RegisterScreen() {
 
             <Text style={styles.label}>Email</Text>
             <View style={styles.inputWrapper}>
-              <Feather
-                name="mail"
-                size={18}
-                color={Colors.textSecondary}
-                style={styles.inputIcon}
-              />
+              <Feather name="mail" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="you@example.com"
@@ -151,12 +128,7 @@ export default function RegisterScreen() {
 
             <Text style={styles.label}>Phone (optional)</Text>
             <View style={styles.inputWrapper}>
-              <Feather
-                name="phone"
-                size={18}
-                color={Colors.textSecondary}
-                style={styles.inputIcon}
-              />
+              <Feather name="phone" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="+91 9876543210"
@@ -169,12 +141,7 @@ export default function RegisterScreen() {
 
             <Text style={styles.label}>Password</Text>
             <View style={styles.inputWrapper}>
-              <Feather
-                name="lock"
-                size={18}
-                color={Colors.textSecondary}
-                style={styles.inputIcon}
-              />
+              <Feather name="lock" size={18} color={Colors.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Create a strong password"
@@ -185,11 +152,15 @@ export default function RegisterScreen() {
               />
             </View>
 
+            <View style={styles.demoNote}>
+              <Feather name="info" size={13} color={Colors.accent} />
+              <Text style={styles.demoNoteText}>
+                Demo data (vaults & transactions) will be pre-loaded for you
+              </Text>
+            </View>
+
             <Pressable
-              style={({ pressed }) => [
-                styles.registerButton,
-                { opacity: pressed ? 0.85 : 1 },
-              ]}
+              style={({ pressed }) => [styles.registerButton, { opacity: pressed ? 0.85 : 1 }]}
               onPress={handleRegister}
               disabled={isLoading}
             >
@@ -223,10 +194,7 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
   flex: { flex: 1 },
-  container: {
-    paddingHorizontal: 24,
-    flexGrow: 1,
-  },
+  container: { paddingHorizontal: 24, flexGrow: 1 },
   backButton: {
     width: 44,
     height: 44,
@@ -238,9 +206,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     marginBottom: 24,
   },
-  header: {
-    marginBottom: 28,
-  },
+  header: { marginBottom: 28 },
   title: {
     fontFamily: "Inter_700Bold",
     fontSize: 28,
@@ -293,9 +259,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     height: 52,
   },
-  inputIcon: {
-    marginRight: 10,
-  },
+  inputIcon: { marginRight: 10 },
   input: {
     flex: 1,
     fontFamily: "Inter_400Regular",
@@ -303,15 +267,26 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     height: "100%",
   },
-  registerButton: {
-    borderRadius: 14,
-    overflow: "hidden",
-    marginTop: 8,
+  demoNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: `${Colors.accent}12`,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  buttonGradient: {
-    paddingVertical: 16,
-    alignItems: "center",
+  demoNoteText: {
+    flex: 1,
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 18,
   },
+  registerButton: { borderRadius: 14, overflow: "hidden", marginTop: 4 },
+  buttonGradient: { paddingVertical: 16, alignItems: "center" },
   buttonText: {
     fontFamily: "Inter_700Bold",
     fontSize: 16,

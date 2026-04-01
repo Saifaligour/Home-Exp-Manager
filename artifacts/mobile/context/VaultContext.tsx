@@ -68,6 +68,8 @@ interface VaultContextValue {
   removeMember: (vaultId: string, memberId: string) => Promise<void>;
   searchTransactions: (query: string) => Transaction[];
   refreshVaults: () => Promise<void>;
+  /** Bulk-load seed/mock data (replaces any existing vaults) */
+  seedVaults: (data: Vault[]) => Promise<void>;
 }
 
 interface CreateVaultData {
@@ -305,6 +307,13 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [vaults, saveVaults]
   );
 
+  const seedVaults = useCallback(
+    async (data: Vault[]) => {
+      await saveVaults(data);
+    },
+    [saveVaults]
+  );
+
   const searchTransactions = useCallback(
     (query: string): Transaction[] => {
       if (!query.trim()) return [];
@@ -348,6 +357,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       removeMember,
       searchTransactions,
       refreshVaults: loadVaults,
+      seedVaults,
     }),
     [
       vaults,
@@ -363,6 +373,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       removeMember,
       searchTransactions,
       loadVaults,
+      seedVaults,
     ]
   );
 
