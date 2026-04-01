@@ -43,8 +43,10 @@ function MainVaultBlock({
   childVaults: Vault[];
   index: number;
 }) {
-  const totalChildBalance = childVaults.reduce((s, v) => s + v.balance, 0);
-  const combinedBalance = mainVault.balance + totalChildBalance;
+  const totalAllocated = childVaults.reduce((s, v) => s + v.balance, 0);
+  const totalIn = mainVault.transactions
+    .filter((t) => t.type === "credit")
+    .reduce((s, t) => s + t.amount, 0);
 
   return (
     <Animated.View
@@ -79,21 +81,20 @@ function MainVaultBlock({
 
           <View style={styles.mainVaultBalanceRow}>
             <View>
-              <Text style={styles.balanceLabel}>
-                {childVaults.length > 0 ? "Combined Balance" : "Balance"}
-              </Text>
+              <Text style={styles.balanceLabel}>Available</Text>
               <Text style={[styles.mainVaultBalance, { color: mainVault.color || Colors.accent }]}>
-                {formatCurrency(combinedBalance)}
+                {formatCurrency(mainVault.balance)}
               </Text>
             </View>
-            <View style={styles.subBalanceBox}>
-              <Text style={styles.subBalanceLabel}>
-                {childVaults.length} sub-vault{childVaults.length !== 1 ? "s" : ""}
-              </Text>
-              {childVaults.length > 0 && (
-                <Text style={styles.subBalanceValue}>{formatCurrency(totalChildBalance)}</Text>
-              )}
-            </View>
+            {childVaults.length > 0 && (
+              <View style={styles.subBalanceBox}>
+                <Text style={styles.subBalanceLabel}>Allocated to sub-vaults</Text>
+                <Text style={styles.subBalanceValue}>{formatCurrency(totalAllocated)}</Text>
+                <Text style={[styles.subBalanceLabel, { marginTop: 2 }]}>
+                  of {formatCurrency(totalIn)} total
+                </Text>
+              </View>
+            )}
           </View>
         </LinearGradient>
       </Pressable>

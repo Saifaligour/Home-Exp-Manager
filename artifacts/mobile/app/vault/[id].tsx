@@ -32,13 +32,14 @@ export default function VaultDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { vaults, deleteTransaction } = useVaults();
+  const { vaults, deleteTransaction, getVaultStats } = useVaults();
   const [activeTab, setActiveTab] = useState<Tab>("transactions");
 
   const vault = vaults.find((v) => v.id === id);
   const childVaults = vault?.isMain
     ? vaults.filter((v) => !v.isMain && v.parentId === vault.id)
     : [];
+  const stats = vault ? getVaultStats(vault) : null;
 
   if (!vault) {
     return (
@@ -54,15 +55,7 @@ export default function VaultDetailScreen() {
     );
   }
 
-  const totalCredit = vault.transactions
-    .filter((t) => t.type === "credit")
-    .reduce((s, t) => s + t.amount, 0);
-  const totalDebit = vault.transactions
-    .filter((t) => t.type === "debit")
-    .reduce((s, t) => s + t.amount, 0);
-
   const totalChildBalance = childVaults.reduce((s, v) => s + v.balance, 0);
-  const combinedBalance = vault.isMain ? vault.balance + totalChildBalance : vault.balance;
 
   const handleDeleteTx = (txId: string, desc: string) => {
     Alert.alert("Delete Transaction", `Delete "${desc}"?`, [
@@ -155,49 +148,126 @@ export default function VaultDetailScreen() {
               )}
             </View>
 
-            <Text style={styles.balanceLabel}>
-              {vault.isMain ? "Total Balance (incl. sub-vaults)" : "Current Balance"}
-            </Text>
-            <Text style={[styles.balance, { color: vault.color || Colors.accent }]}>
-              {formatCurrency(combinedBalance)}
-            </Text>
-
-            {vault.isMain && childVaults.length > 0 && (
-              <View style={styles.ownBalanceRow}>
-                <Text style={styles.ownBalanceLabel}>Own balance:</Text>
-                <Text style={styles.ownBalanceValue}>
+            {/* Main vault: show available + allocated + children */}
+            {vault.isMain ? (
+              <>
+                <Text style={styles.balanceLabel}>Available Balance</Text>
+                <Text style={[styles.balance, { color: vault.color || Colors.accent }]}>
                   {formatCurrency(vault.balance)}
                 </Text>
-                <Text style={styles.ownBalanceLabel}>  Sub-vaults:</Text>
-                <Text style={styles.ownBalanceValue}>
-                  {formatCurrency(totalChildBalance)}
+                <View style={styles.statsRow}>
+                  <View style={styles.statBox}>
+                    <View style={styles.statIcon}>
+                      <Feather name="arrow-down-left" size={14} color={Colors.success} />
+                    </View>
+                    <Text style={styles.statLabel}>Total In</Text>
+                    <Text style={[styles.statValue, { color: Colors.success }]}>
+                      {formatCurrency(stats?.totalIn ?? 0)}
+                    </Text>
+                  </View>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statBox}>
+                    <View style={[styles.statIcon, { backgroundColor: "rgba(167,139,250,0.15)" }]}>
+                      <Feather name="send" size={14} color="#A78BFA" />
+                    </View>
+                    <Text style={styles.statLabel}>Allocated</Text>
+                    <Text style={[styles.statValue, { color: "#A78BFA" }]}>
+                      {formatCurrency(stats?.totalAllocated ?? 0)}
+                    </Text>
+                  </View>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statBox}>
+                    <View style={[styles.statIcon, { backgroundColor: `${Colors.danger}18` }]}>
+                      <Feather name="arrow-up-right" size={14} color={Colors.danger} />
+                    </View>
+                    <Text style={styles.statLabel}>Spent</Text>
+                    <Text style={[styles.statValue, { color: Colors.danger }]}>
+                      {formatCurrency(stats?.totalOut ?? 0)}
+                    </Text>
+                  </View>
+                </View>
+                {childVaults.length > 0 && (
+                  <View style={styles.childSummaryRow}>
+                    <Feather name="git-branch" size={12} color={Colors.textSecondary} />
+                    <Text style={styles.childSummaryText}>
+                      {childVaults.length} sub-vault{childVaults.length !== 1 ? "s" : ""} hold{" "}
+                      <Text style={{ color: Colors.accent }}>{formatCurrency(totalChildBalance)}</Text>
+                    </Text>
+                  </View>
+                )}
+              </>
+            ) : (
+              /* Child vault: show budget / spent / remaining */
+              <>
+                <Text style={styles.balanceLabel}>Remaining Budget</Text>
+                <Text style={[styles.balance, { color: vault.color || Colors.accent }]}>
+                  {formatCurrency(vault.balance)}
                 </Text>
-              </View>
-            )}
 
-            <View style={styles.statsRow}>
-              <View style={styles.statBox}>
-                <View style={styles.statIcon}>
-                  <Feather name="arrow-down-left" size={14} color={Colors.success} />
+                {/* Budget progress bar */}
+                {(stats?.budget ?? 0) > 0 && (
+                  <View style={styles.progressContainer}>
+                    <View style={styles.progressTrack}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          {
+                            width: `${Math.min(
+                              100,
+                              ((stats?.spent ?? 0) / (stats?.budget ?? 1)) * 100
+                            )}%` as any,
+                            backgroundColor:
+                              (stats?.spent ?? 0) >= (stats?.budget ?? 0)
+                                ? Colors.danger
+                                : Colors.success,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.progressLabel}>
+                      {Math.min(
+                        100,
+                        Math.round(
+                          ((stats?.spent ?? 0) / (stats?.budget ?? 1)) * 100
+                        )
+                      )}% used
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.statsRow}>
+                  <View style={styles.statBox}>
+                    <View style={[styles.statIcon, { backgroundColor: "rgba(167,139,250,0.15)" }]}>
+                      <Feather name="arrow-left-circle" size={14} color="#A78BFA" />
+                    </View>
+                    <Text style={styles.statLabel}>Budget</Text>
+                    <Text style={[styles.statValue, { color: "#A78BFA" }]}>
+                      {formatCurrency(stats?.budget ?? 0)}
+                    </Text>
+                  </View>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statBox}>
+                    <View style={[styles.statIcon, { backgroundColor: `${Colors.danger}18` }]}>
+                      <Feather name="arrow-up-right" size={14} color={Colors.danger} />
+                    </View>
+                    <Text style={styles.statLabel}>Spent</Text>
+                    <Text style={[styles.statValue, { color: Colors.danger }]}>
+                      {formatCurrency(stats?.spent ?? 0)}
+                    </Text>
+                  </View>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statBox}>
+                    <View style={styles.statIcon}>
+                      <Feather name="check-circle" size={14} color={Colors.success} />
+                    </View>
+                    <Text style={styles.statLabel}>Remaining</Text>
+                    <Text style={[styles.statValue, { color: Colors.success }]}>
+                      {formatCurrency(vault.balance)}
+                    </Text>
+                  </View>
                 </View>
-                <Text style={styles.statLabel}>Total In</Text>
-                <Text style={[styles.statValue, { color: Colors.success }]}>
-                  {formatCurrency(totalCredit)}
-                </Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statBox}>
-                <View
-                  style={[styles.statIcon, { backgroundColor: `${Colors.danger}18` }]}
-                >
-                  <Feather name="arrow-up-right" size={14} color={Colors.danger} />
-                </View>
-                <Text style={styles.statLabel}>Total Out</Text>
-                <Text style={[styles.statValue, { color: Colors.danger }]}>
-                  {formatCurrency(totalDebit)}
-                </Text>
-              </View>
-            </View>
+              </>
+            )}
           </LinearGradient>
         </Animated.View>
 
@@ -313,12 +383,11 @@ export default function VaultDetailScreen() {
             ) : (
               <View style={styles.childList}>
                 {childVaults.map((child) => {
-                  const childCredit = child.transactions
-                    .filter((t) => t.type === "credit")
-                    .reduce((s, t) => s + t.amount, 0);
-                  const childDebit = child.transactions
-                    .filter((t) => t.type === "debit")
-                    .reduce((s, t) => s + t.amount, 0);
+                  const childStats = getVaultStats(child);
+                  const spentPct =
+                    childStats.budget > 0
+                      ? Math.min(100, (childStats.spent / childStats.budget) * 100)
+                      : 0;
 
                   return (
                     <Pressable
@@ -346,21 +415,35 @@ export default function VaultDetailScreen() {
                       <View style={styles.childCardInfo}>
                         <Text style={styles.childCardName}>{child.name}</Text>
                         <View style={styles.childCardStats}>
-                          <Feather name="arrow-down-left" size={10} color={Colors.success} />
-                          <Text style={styles.childStatText}>{formatCurrency(childCredit)}</Text>
+                          <Text style={[styles.childStatText, { color: "#A78BFA" }]}>
+                            Budget {formatCurrency(childStats.budget)}
+                          </Text>
                           <Text style={styles.childStatSep}>·</Text>
                           <Feather name="arrow-up-right" size={10} color={Colors.danger} />
-                          <Text style={styles.childStatText}>{formatCurrency(childDebit)}</Text>
-                          <Text style={styles.childStatSep}>·</Text>
-                          <Text style={styles.childStatText}>
-                            {child.transactions.length} txn{child.transactions.length !== 1 ? "s" : ""}
+                          <Text style={[styles.childStatText, { color: Colors.danger }]}>
+                            {formatCurrency(childStats.spent)}
                           </Text>
                         </View>
+                        {childStats.budget > 0 && (
+                          <View style={styles.miniProgressTrack}>
+                            <View
+                              style={[
+                                styles.miniProgressFill,
+                                {
+                                  width: `${spentPct}%` as any,
+                                  backgroundColor:
+                                    spentPct >= 100 ? Colors.danger : child.color || Colors.success,
+                                },
+                              ]}
+                            />
+                          </View>
+                        )}
                       </View>
                       <View style={styles.childCardRight}>
                         <Text style={[styles.childBalance, { color: child.color || Colors.accent }]}>
                           {formatCurrency(child.balance)}
                         </Text>
+                        <Text style={styles.childBalanceLabel}>remaining</Text>
                         <Feather name="chevron-right" size={14} color={Colors.muted} />
                       </View>
                     </Pressable>
@@ -545,22 +628,40 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     marginBottom: 4,
   },
-  ownBalanceRow: {
+  childSummaryRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginBottom: 14,
-    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 10,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  ownBalanceLabel: {
+  childSummaryText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  progressContainer: {
+    marginTop: 6,
+    marginBottom: 12,
+    gap: 5,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  progressLabel: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
     color: Colors.textSecondary,
-  },
-  ownBalanceValue: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 12,
-    color: Colors.textPrimary,
   },
   statsRow: {
     flexDirection: "row",
@@ -692,6 +793,24 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     padding: 14,
     gap: 12,
+  },
+  miniProgressTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    overflow: "hidden",
+    marginTop: 6,
+    width: "100%",
+  },
+  miniProgressFill: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  childBalanceLabel: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 10,
+    color: Colors.textSecondary,
+    marginTop: 1,
   },
   childCardIcon: {
     width: 44,

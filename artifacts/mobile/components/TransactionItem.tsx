@@ -35,13 +35,43 @@ function formatDate(isoString: string): string {
   });
 }
 
+function getTransactionStyle(tx: Transaction): {
+  color: string;
+  icon: React.ComponentProps<typeof Feather>["name"];
+  prefix: string;
+  label: string;
+} {
+  if (tx.type === "transfer") {
+    const isOut = !!tx.transferToVaultId;
+    return {
+      color: "#A78BFA",
+      icon: isOut ? "arrow-right-circle" : "arrow-left-circle",
+      prefix: isOut ? "→" : "←",
+      label: isOut ? "Allocated" : "Received",
+    };
+  }
+  if (tx.type === "credit") {
+    return {
+      color: Colors.success,
+      icon: "arrow-down-left",
+      prefix: "+",
+      label: "Credit",
+    };
+  }
+  return {
+    color: Colors.danger,
+    icon: "arrow-up-right",
+    prefix: "-",
+    label: "Debit",
+  };
+}
+
 export function TransactionItem({
   transaction,
   onLongPress,
   showVaultName,
 }: TransactionItemProps) {
-  const isCredit = transaction.type === "credit";
-  const color = isCredit ? Colors.success : Colors.danger;
+  const { color, icon, prefix, label } = getTransactionStyle(transaction);
 
   return (
     <Pressable
@@ -50,11 +80,7 @@ export function TransactionItem({
       delayLongPress={400}
     >
       <View style={[styles.typeIcon, { backgroundColor: `${color}18` }]}>
-        <Feather
-          name={isCredit ? "arrow-down-left" : "arrow-up-right"}
-          size={18}
-          color={color}
-        />
+        <Feather name={icon} size={18} color={color} />
       </View>
 
       <View style={styles.info}>
@@ -62,6 +88,9 @@ export function TransactionItem({
           {transaction.description}
         </Text>
         <View style={styles.meta}>
+          <View style={[styles.typePill, { backgroundColor: `${color}18` }]}>
+            <Text style={[styles.typeLabel, { color }]}>{label}</Text>
+          </View>
           <Text style={styles.date}>{formatDate(transaction.createdAt)}</Text>
           {showVaultName ? (
             <>
@@ -80,11 +109,11 @@ export function TransactionItem({
 
       <View style={styles.right}>
         <Text style={[styles.amount, { color }]}>
-          {isCredit ? "+" : "-"}
+          {prefix}
           {formatAmount(transaction.amount)}
         </Text>
         <Text style={styles.balance}>
-          ₹{transaction.balanceAfter.toLocaleString("en-IN")}
+          Bal: ₹{transaction.balanceAfter.toLocaleString("en-IN")}
         </Text>
         {transaction.imageUrl ? (
           <Feather name="image" size={12} color={Colors.muted} style={{ marginTop: 2 }} />
@@ -118,13 +147,23 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     fontSize: 14,
     color: Colors.textPrimary,
-    marginBottom: 4,
+    marginBottom: 5,
   },
   meta: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
     flexWrap: "wrap",
+  },
+  typePill: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  typeLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 10,
+    letterSpacing: 0.4,
   },
   date: {
     fontFamily: "Inter_400Regular",

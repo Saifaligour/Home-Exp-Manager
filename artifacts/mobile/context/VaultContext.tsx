@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Crypto from "expo-crypto";
 import React, {
   createContext,
   useCallback,
@@ -13,7 +12,7 @@ import React, {
 export interface Transaction {
   id: string;
   vaultId: string;
-  type: "credit" | "debit";
+  type: "credit" | "debit" | "transfer";
   amount: number;
   description: string;
   imageUrl?: string;
@@ -21,6 +20,10 @@ export interface Transaction {
   createdByName: string;
   createdAt: string;
   balanceAfter: number;
+  /** Set on transfer-out transaction (main vault side) */
+  transferToVaultId?: string;
+  /** Set on transfer-in transaction (child vault side) */
+  transferFromVaultId?: string;
 }
 
 export interface VaultMember {
@@ -48,6 +51,17 @@ export interface Vault {
   members: VaultMember[];
 }
 
+/** Derived stats for a vault — computed from its transactions */
+export interface VaultStats {
+  totalIn: number;       // sum of credits
+  totalOut: number;      // sum of debits
+  totalAllocated: number; // sum of transfers OUT (main vault only)
+  totalReceived: number;  // sum of transfers IN (child vault only)
+  available: number;     // current balance
+  budget: number;        // for child: total received; for main: totalIn
+  spent: number;         // for child: totalOut; for main: totalOut + totalAllocated
+}
+
 interface VaultContextValue {
   vaults: Vault[];
   mainVault: Vault | undefined;
@@ -60,6 +74,7 @@ interface VaultContextValue {
     vaultId: string,
     data: AddTransactionData
   ) => Promise<Transaction>;
+  transferToChild: (data: TransferData) => Promise<void>;
   deleteTransaction: (
     vaultId: string,
     transactionId: string
@@ -68,8 +83,8 @@ interface VaultContextValue {
   removeMember: (vaultId: string, memberId: string) => Promise<void>;
   searchTransactions: (query: string) => Transaction[];
   refreshVaults: () => Promise<void>;
-  /** Bulk-load seed/mock data (replaces any existing vaults) */
   seedVaults: (data: Vault[]) => Promise<void>;
+  getVaultStats: (vault: Vault) => VaultStats;
 }
 
 interface CreateVaultData {
@@ -89,6 +104,15 @@ interface AddTransactionData {
   amount: number;
   description: string;
   imageUrl?: string;
+  userId: string;
+  userName: string;
+}
+
+interface TransferData {
+  fromVaultId: string;
+  toVaultId: string;
+  amount: number;
+  description?: string;
   userId: string;
   userName: string;
 }
@@ -250,6 +274,73 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [vaults, saveVaults]
   );
 
+  /**
+   * Atomically moves `amount` from a main vault to a child vault.
+   * - Creates a "transfer" type transaction on the main vault (deducts balance)
+   * - Creates a "transfer" type transaction on the child vault (adds balance)
+   */
+  const transferToChild = useCallback(
+    async (data: TransferData) => {
+      const fromVault = vaults.find((v) => v.id === data.fromVaultId);
+      const toVault = vaults.find((v) => v.id === data.toVaultId);
+      if (!fromVault || !toVault) throw new Error("Vault not found");
+      if (fromVault.balance < data.amount) throw new Error("Insufficient balance");
+
+      const label = data.description?.trim() || `Allocated to ${toVault.name}`;
+      const now = new Date().toISOString();
+
+      const fromNewBalance = fromVault.balance - data.amount;
+      const toNewBalance = toVault.balance + data.amount;
+
+      const txOut: Transaction = {
+        id: generateId(),
+        vaultId: data.fromVaultId,
+        type: "transfer",
+        amount: data.amount,
+        description: label,
+        createdById: data.userId,
+        createdByName: data.userName,
+        createdAt: now,
+        balanceAfter: fromNewBalance,
+        transferToVaultId: data.toVaultId,
+      };
+
+      const txIn: Transaction = {
+        id: generateId(),
+        vaultId: data.toVaultId,
+        type: "transfer",
+        amount: data.amount,
+        description: `Received from ${fromVault.name}`,
+        createdById: data.userId,
+        createdByName: data.userName,
+        createdAt: now,
+        balanceAfter: toNewBalance,
+        transferFromVaultId: data.fromVaultId,
+      };
+
+      const updated = vaults.map((v) => {
+        if (v.id === data.fromVaultId) {
+          return {
+            ...v,
+            balance: fromNewBalance,
+            transactions: [txOut, ...v.transactions],
+          };
+        }
+        if (v.id === data.toVaultId) {
+          return {
+            ...v,
+            balance: toNewBalance,
+            transactions: [txIn, ...v.transactions],
+          };
+        }
+        return v;
+      });
+
+      await saveVaults(updated);
+    },
+    [vaults, saveVaults]
+  );
+
   const deleteTransaction = useCallback(
     async (vaultId: string, transactionId: string) => {
       const vault = vaults.find((v) => v.id === vaultId);
@@ -259,7 +350,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       if (!tx) return;
 
       const newBalance =
-        tx.type === "credit"
+        tx.type === "credit" || tx.transferFromVaultId
           ? vault.balance - tx.amount
           : vault.balance + tx.amount;
 
@@ -339,6 +430,57 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [vaults]
   );
 
+  /**
+   * Computes derived stats for any vault from its transaction history.
+   */
+  const getVaultStats = useCallback(
+    (vault: Vault): VaultStats => {
+      let totalIn = 0;
+      let totalOut = 0;
+      let totalAllocated = 0;
+      let totalReceived = 0;
+
+      for (const tx of vault.transactions) {
+        if (tx.type === "credit") {
+          totalIn += tx.amount;
+        } else if (tx.type === "debit") {
+          totalOut += tx.amount;
+        } else if (tx.type === "transfer") {
+          if (tx.transferToVaultId) {
+            totalAllocated += tx.amount;
+          } else if (tx.transferFromVaultId) {
+            totalReceived += tx.amount;
+          }
+        }
+      }
+
+      const available = vault.balance;
+
+      if (vault.isMain) {
+        return {
+          totalIn,
+          totalOut,
+          totalAllocated,
+          totalReceived,
+          available,
+          budget: totalIn,
+          spent: totalOut + totalAllocated,
+        };
+      } else {
+        return {
+          totalIn,
+          totalOut,
+          totalAllocated,
+          totalReceived,
+          available,
+          budget: totalReceived,
+          spent: totalOut,
+        };
+      }
+    },
+    []
+  );
+
   const mainVaults = useMemo(() => vaults.filter((v) => v.isMain), [vaults]);
   const mainVault = useMemo(() => mainVaults[0], [mainVaults]);
 
@@ -352,12 +494,14 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       updateVault,
       deleteVault,
       addTransaction,
+      transferToChild,
       deleteTransaction,
       addMember,
       removeMember,
       searchTransactions,
       refreshVaults: loadVaults,
       seedVaults,
+      getVaultStats,
     }),
     [
       vaults,
@@ -368,12 +512,14 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       updateVault,
       deleteVault,
       addTransaction,
+      transferToChild,
       deleteTransaction,
       addMember,
       removeMember,
       searchTransactions,
       loadVaults,
       seedVaults,
+      getVaultStats,
     ]
   );
 
