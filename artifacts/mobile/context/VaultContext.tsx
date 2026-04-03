@@ -468,9 +468,19 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const available = vault.balance;
-
       if (vault.isMain) {
+        // Sum all actual spending (debits) across every child vault
+        const totalChildSpent = vaults
+          .filter((v) => !v.isMain && v.parentId === vault.id)
+          .reduce((sum, cv) => {
+            return (
+              sum +
+              cv.transactions
+                .filter((tx) => tx.type === "debit")
+                .reduce((s, tx) => s + tx.amount, 0)
+            );
+          }, 0);
+        const available = totalIn - totalChildSpent;
         return {
           totalIn,
           totalOut,
@@ -478,9 +488,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           totalReceived,
           available,
           budget: totalIn,
-          spent: totalOut + totalAllocated,
+          spent: totalChildSpent,
         };
       } else {
+        const available = vault.balance;
         return {
           totalIn,
           totalOut,
@@ -492,7 +503,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         };
       }
     },
-    []
+    [vaults]
   );
 
   const mainVaults = useMemo(() => vaults.filter((v) => v.isMain), [vaults]);

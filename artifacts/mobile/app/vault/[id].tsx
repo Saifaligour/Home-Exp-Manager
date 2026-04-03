@@ -196,14 +196,14 @@ export default function VaultDetailScreen() {
                   <View style={styles.availablePill}>
                     <Feather name="check-circle" size={12} color={Colors.success} />
                     <Text style={styles.availablePillText}>
-                      Available: {formatCurrency(vault.balance)}
+                      Available: {formatCurrency(stats?.available ?? 0)}
                     </Text>
                   </View>
-                  {(stats?.totalAllocated ?? 0) > 0 && (
-                    <View style={[styles.availablePill, { backgroundColor: "rgba(167,139,250,0.12)", borderColor: "rgba(167,139,250,0.3)" }]}>
-                      <Feather name="send" size={12} color="#A78BFA" />
-                      <Text style={[styles.availablePillText, { color: "#A78BFA" }]}>
-                        Allocated: {formatCurrency(stats?.totalAllocated ?? 0)}
+                  {(stats?.spent ?? 0) > 0 && (
+                    <View style={[styles.availablePill, { backgroundColor: `${Colors.danger}10`, borderColor: `${Colors.danger}28` }]}>
+                      <Feather name="trending-down" size={12} color={Colors.danger} />
+                      <Text style={[styles.availablePillText, { color: Colors.danger }]}>
+                        Spent: {formatCurrency(stats?.spent ?? 0)}
                       </Text>
                     </View>
                   )}
@@ -221,12 +221,12 @@ export default function VaultDetailScreen() {
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statBox}>
-                    <View style={[styles.statIcon, { backgroundColor: "rgba(167,139,250,0.15)" }]}>
-                      <Feather name="send" size={14} color="#A78BFA" />
+                    <View style={[styles.statIcon, { backgroundColor: `${Colors.danger}15` }]}>
+                      <Feather name="trending-down" size={14} color={Colors.danger} />
                     </View>
-                    <Text style={styles.statLabel}>Allocated</Text>
-                    <Text style={[styles.statValue, { color: "#A78BFA" }]}>
-                      {formatCurrency(stats?.totalAllocated ?? 0)}
+                    <Text style={styles.statLabel}>Spent</Text>
+                    <Text style={[styles.statValue, { color: Colors.danger }]}>
+                      {formatCurrency(stats?.spent ?? 0)}
                     </Text>
                   </View>
                   <View style={styles.statDivider} />
@@ -236,7 +236,7 @@ export default function VaultDetailScreen() {
                     </View>
                     <Text style={styles.statLabel}>Available</Text>
                     <Text style={[styles.statValue, { color: Colors.success }]}>
-                      {formatCurrency(vault.balance)}
+                      {formatCurrency(stats?.available ?? 0)}
                     </Text>
                   </View>
                 </View>

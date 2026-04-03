@@ -43,10 +43,19 @@ function MainVaultBlock({
   childVaults: Vault[];
   index: number;
 }) {
-  const totalAllocated = childVaults.reduce((s, v) => s + v.balance, 0);
   const totalIn = mainVault.transactions
     .filter((t) => t.type === "credit")
     .reduce((s, t) => s + t.amount, 0);
+  const totalChildSpent = childVaults.reduce((sum, cv) => {
+    return (
+      sum +
+      cv.transactions
+        .filter((tx) => tx.type === "debit")
+        .reduce((s, tx) => s + tx.amount, 0)
+    );
+  }, 0);
+  const mainAvailable = totalIn - totalChildSpent;
+  const totalAllocated = childVaults.reduce((s, v) => s + v.balance, 0);
 
   return (
     <Animated.View
@@ -89,14 +98,14 @@ function MainVaultBlock({
                 <View style={styles.miniPill}>
                   <Feather name="check-circle" size={10} color={Colors.success} />
                   <Text style={[styles.miniPillText, { color: Colors.success }]}>
-                    Available {formatCurrency(mainVault.balance)}
+                    Available {formatCurrency(mainAvailable)}
                   </Text>
                 </View>
-                {totalAllocated > 0 && (
-                  <View style={[styles.miniPill, { backgroundColor: "rgba(167,139,250,0.1)", borderColor: "rgba(167,139,250,0.25)" }]}>
-                    <Feather name="send" size={10} color="#A78BFA" />
-                    <Text style={[styles.miniPillText, { color: "#A78BFA" }]}>
-                      Allocated {formatCurrency(totalAllocated)}
+                {totalChildSpent > 0 && (
+                  <View style={[styles.miniPill, { backgroundColor: `${Colors.danger}10`, borderColor: `${Colors.danger}25` }]}>
+                    <Feather name="trending-down" size={10} color={Colors.danger} />
+                    <Text style={[styles.miniPillText, { color: Colors.danger }]}>
+                      Spent {formatCurrency(totalChildSpent)}
                     </Text>
                   </View>
                 )}
