@@ -31,6 +31,9 @@ export default function MembersScreen() {
   const { vaults, addMember, removeMember } = useVaults();
 
   const vault = vaults.find((v) => v.id === vaultId);
+  const isAdmin = vault?.members.some(
+    (m) => m.userId === user?.id && m.role === "admin"
+  ) ?? false;
   const [identifier, setIdentifier] = useState("");
   const [role, setRole] = useState<"admin" | "member">("member");
   const [isAdding, setIsAdding] = useState(false);
@@ -124,12 +127,16 @@ export default function MembersScreen() {
           <Feather name="x" size={20} color={Colors.textSecondary} />
         </Pressable>
         <Text style={styles.headerTitle}>Vault Members</Text>
-        <Pressable
-          style={styles.addBtn}
-          onPress={() => setShowAddForm(!showAddForm)}
-        >
-          <Feather name={showAddForm ? "minus" : "plus"} size={18} color={Colors.accent} />
-        </Pressable>
+        {isAdmin ? (
+          <Pressable
+            style={styles.addBtn}
+            onPress={() => setShowAddForm(!showAddForm)}
+          >
+            <Feather name={showAddForm ? "minus" : "plus"} size={18} color={Colors.accent} />
+          </Pressable>
+        ) : (
+          <View style={styles.addBtn} />
+        )}
       </View>
 
       <ScrollView
@@ -140,7 +147,7 @@ export default function MembersScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {showAddForm && (
+        {isAdmin && showAddForm && (
           <View style={styles.addForm}>
             <Text style={styles.addFormTitle}>Add New Member</Text>
 
@@ -281,7 +288,7 @@ export default function MembersScreen() {
                         {m.role}
                       </Text>
                     </View>
-                    {m.userId !== user?.id && (
+                    {isAdmin && m.userId !== user?.id && (
                       <Pressable
                         onPress={() => handleRemoveMember(m)}
                         style={styles.removeBtn}

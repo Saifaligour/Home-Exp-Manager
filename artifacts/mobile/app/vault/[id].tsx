@@ -32,7 +32,7 @@ export default function VaultDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { vaults, deleteTransaction, getVaultStats } = useVaults();
+  const { vaults, deleteTransaction, deleteVault, getVaultStats } = useVaults();
   const [activeTab, setActiveTab] = useState<Tab>("transactions");
 
   const vault = vaults.find((v) => v.id === id);
@@ -40,6 +40,10 @@ export default function VaultDetailScreen() {
     ? vaults.filter((v) => !v.isMain && v.parentId === vault.id)
     : [];
   const stats = vault ? getVaultStats(vault) : null;
+
+  const isAdmin = vault?.members.some(
+    (m) => m.userId === user?.id && m.role === "admin"
+  ) ?? false;
 
   if (!vault) {
     return (
@@ -58,6 +62,7 @@ export default function VaultDetailScreen() {
   const totalChildBalance = childVaults.reduce((s, v) => s + v.balance, 0);
 
   const handleDeleteTx = (txId: string, desc: string) => {
+    if (!isAdmin) return;
     Alert.alert("Delete Transaction", `Delete "${desc}"?`, [
       { text: "Cancel", style: "cancel" },
       {
@@ -69,6 +74,26 @@ export default function VaultDetailScreen() {
         },
       },
     ]);
+  };
+
+  const handleDeleteVault = () => {
+    if (!isAdmin) return;
+    Alert.alert(
+      "Delete Vault",
+      `Are you sure you want to delete "${vault.name}"? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            await deleteVault(vault.id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            router.replace("/");
+          },
+        },
+      ]
+    );
   };
 
   const tabs: { key: Tab; label: string; count: number }[] = [
@@ -102,17 +127,27 @@ export default function VaultDetailScreen() {
             </View>
           )}
         </View>
-        <Pressable
-          style={styles.headerAction}
-          onPress={() =>
-            router.push({
-              pathname: "/members/[vaultId]",
-              params: { vaultId: vault.id },
-            })
-          }
-        >
-          <Feather name="users" size={18} color={Colors.textSecondary} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          {isAdmin && (
+            <Pressable
+              style={[styles.headerAction, styles.headerActionDanger]}
+              onPress={handleDeleteVault}
+            >
+              <Feather name="trash-2" size={16} color={Colors.danger} />
+            </Pressable>
+          )}
+          <Pressable
+            style={styles.headerAction}
+            onPress={() =>
+              router.push({
+                pathname: "/members/[vaultId]",
+                params: { vaultId: vault.id },
+              })
+            }
+          >
+            <Feather name="users" size={18} color={Colors.textSecondary} />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -364,7 +399,11 @@ export default function VaultDetailScreen() {
                   <React.Fragment key={tx.id}>
                     <TransactionItem
                       transaction={tx}
-                      onLongPress={() => handleDeleteTx(tx.id, tx.description)}
+                      onLongPress={
+                        isAdmin
+                          ? () => handleDeleteTx(tx.id, tx.description)
+                          : undefined
+                      }
                     />
                     {i < vault.transactions.length - 1 && (
                       <View style={styles.txSeparator} />
@@ -584,6 +623,11 @@ const styles = StyleSheet.create({
     color: Colors.accent,
     letterSpacing: 0.8,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   headerAction: {
     width: 40,
     height: 40,
@@ -593,6 +637,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
+  },
+  headerActionDanger: {
+    backgroundColor: `${Colors.danger}15`,
+    borderColor: `${Colors.danger}30`,
   },
   scroll: { flex: 1 },
   content: { paddingTop: 4 },
