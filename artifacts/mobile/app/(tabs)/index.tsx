@@ -569,23 +569,27 @@ const styles = StyleSheet.create({
     fontSize: 30,
     letterSpacing: -0.8,
   },
-  subBalanceBox: {
-    alignItems: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.2)",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  mainVaultSubRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 8,
   },
-  subBalanceLabel: {
-    fontFamily: "Inter_400Regular",
+  miniPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: `${Colors.success}12`,
+    borderWidth: 1,
+    borderColor: `${Colors.success}28`,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  miniPillText: {
+    fontFamily: "Inter_500Medium",
     fontSize: 11,
-    color: Colors.textSecondary,
-    marginBottom: 2,
-  },
-  subBalanceValue: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 13,
-    color: Colors.textPrimary,
+    color: Colors.success,
   },
 
   /* Sub-vaults tree */
