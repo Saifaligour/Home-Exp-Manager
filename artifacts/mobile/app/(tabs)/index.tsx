@@ -156,12 +156,13 @@ function MainVaultBlock({
           <View style={styles.childList}>
             {childVaults.map((vault, i) => {
               const isLast = i === childVaults.length - 1;
-              const credit = vault.transactions
-                .filter((t) => t.type === "credit")
+              const allocated = vault.transactions
+                .filter((t) => t.type === "transfer" && t.transferFromVaultId)
                 .reduce((s, t) => s + t.amount, 0);
-              const debit = vault.transactions
+              const spent = vault.transactions
                 .filter((t) => t.type === "debit")
                 .reduce((s, t) => s + t.amount, 0);
+              const spentPct = allocated > 0 ? Math.min(spent / allocated, 1) : 0;
 
               return (
                 <Animated.View
@@ -186,17 +187,38 @@ function MainVaultBlock({
                     <View style={styles.childCardInfo}>
                       <Text style={styles.childCardName}>{vault.name}</Text>
                       <View style={styles.childCardStats}>
-                        <Feather name="arrow-down-left" size={10} color={Colors.success} />
-                        <Text style={styles.childStatText}>{formatCurrency(credit)}</Text>
+                        <Feather name="send" size={10} color="#A78BFA" />
+                        <Text style={[styles.childStatText, { color: "#A78BFA" }]}>
+                          {formatCurrency(allocated)}
+                        </Text>
                         <Text style={styles.childStatDot}>·</Text>
                         <Feather name="arrow-up-right" size={10} color={Colors.danger} />
-                        <Text style={styles.childStatText}>{formatCurrency(debit)}</Text>
+                        <Text style={styles.childStatText}>{formatCurrency(spent)}</Text>
                       </View>
+                      {allocated > 0 && (
+                        <View style={styles.childProgressBar}>
+                          <View
+                            style={[
+                              styles.childProgressFill,
+                              {
+                                width: `${spentPct * 100}%` as any,
+                                backgroundColor:
+                                  spentPct >= 0.9
+                                    ? Colors.danger
+                                    : spentPct >= 0.7
+                                    ? Colors.warning
+                                    : vault.color || Colors.accent,
+                              },
+                            ]}
+                          />
+                        </View>
+                      )}
                     </View>
                     <View style={styles.childCardRight}>
                       <Text style={[styles.childBalance, { color: vault.color || Colors.accent }]}>
                         {formatCurrency(vault.balance)}
                       </Text>
+                      <Text style={styles.childBalanceLabel}>remaining</Text>
                       <Feather name="chevron-right" size={14} color={Colors.muted} />
                     </View>
                   </Pressable>
@@ -744,8 +766,24 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   childStatDot: { color: Colors.muted, fontSize: 11 },
-  childCardRight: { alignItems: "flex-end", gap: 4 },
+  childCardRight: { alignItems: "flex-end", gap: 2 },
   childBalance: { fontFamily: "Inter_700Bold", fontSize: 14 },
+  childBalanceLabel: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 10,
+    color: Colors.textSecondary,
+  },
+  childProgressBar: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    marginTop: 5,
+    overflow: "hidden",
+  },
+  childProgressFill: {
+    height: 3,
+    borderRadius: 2,
+  },
 
   /* Recent activity */
   section: { marginTop: 8, marginBottom: 8 },
